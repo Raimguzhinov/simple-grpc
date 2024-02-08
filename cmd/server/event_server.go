@@ -21,7 +21,7 @@ var (
 
 type Events struct {
 	ID       int64
-	SenderId int64
+	SenderID int64
 	Time     int64
 	Name     string
 }
@@ -33,11 +33,11 @@ type Server struct {
 
 func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventRequest) (*eventmanager.MakeEventResponse, error) {
 	event := Events{
-		SenderId: req.SenderId,
+		SenderID: req.SenderId,
 		Time:     req.Time,
 		Name:     req.Name,
 	}
-	if _, ok := s.EventsByClient[req.SenderId]; !ok {
+	if _, isCreated := s.EventsByClient[req.SenderId]; !isCreated {
 		s.EventsByClient[req.SenderId] = make(map[int64]Events)
 	}
 	event.ID = int64(len(s.EventsByClient[req.SenderId]) + 1)
@@ -48,11 +48,11 @@ func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventReque
 }
 
 func (s *Server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest) (*eventmanager.GetEventResponse, error) {
-	if eventsByClient, ok := s.EventsByClient[req.SenderId]; ok {
-		if event, ok := eventsByClient[req.EventId]; ok {
+	if eventsByClient, isCreated := s.EventsByClient[req.SenderId]; isCreated {
+		if event, isCreated := eventsByClient[req.EventId]; isCreated {
 			return &eventmanager.GetEventResponse{
-				SenderId: event.SenderId,
-				EventId:  int64(event.ID),
+				SenderId: event.SenderID,
+				EventId:  event.ID,
 				Time:     event.Time,
 				Name:     event.Name,
 			}, nil
@@ -62,10 +62,8 @@ func (s *Server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest
 }
 
 func (s *Server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventRequest) (*eventmanager.DeleteEventResponse, error) {
-	// senderID := req.SenderId
-	// eventID := req.EventId
-	if eventsByClient, ok := s.EventsByClient[req.SenderId]; ok {
-		if _, ok := eventsByClient[req.EventId]; ok {
+	if eventsByClient, isCreated := s.EventsByClient[req.SenderId]; isCreated {
+		if _, isCreated := eventsByClient[req.EventId]; isCreated {
 			delete(s.EventsByClient[req.SenderId], req.EventId)
 			return &eventmanager.DeleteEventResponse{
 				EventId: req.EventId,
@@ -79,11 +77,11 @@ func (s *Server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanag
 	senderID := req.SenderId
 	for _, eventsByClient := range s.EventsByClient {
 		for _, event := range eventsByClient {
-			if event.SenderId == senderID {
+			if event.SenderID == senderID {
 				if req.FromTime < event.Time && event.Time < req.ToTime {
 					if err := stream.Send(&eventmanager.GetEventsResponse{
-						SenderId: event.SenderId,
-						EventId:  int64(event.ID),
+						SenderId: event.SenderID,
+						EventId:  event.ID,
 						Time:     event.Time,
 						Name:     event.Name,
 					}); err != nil {

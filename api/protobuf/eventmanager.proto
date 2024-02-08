@@ -2,13 +2,13 @@ syntax = "proto3";
 
 package eventmanager;
 
-option go_package = "https://github.com/Raimguzhinov/simple-grpc/pkg/eventmanager";
+option go_package = "https://github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf";
 
 service Events {
-  rpc MakeEvent (MakeEventRequest) returns (MakeEventResponse) {}
-  rpc GetEvent (GetEventRequest) returns (GetEventResponse) {}
-  rpc DeleteEvent (DeleteEventRequest) returns (DeleteEventResponse) {}
-  rpc GetEvents (GetEventsRequest) returns (stream GetEventsResponse) {}
+  rpc MakeEvent(MakeEventRequest) returns (MakeEventResponse) {}
+  rpc GetEvent(GetEventRequest) returns (GetEventResponse) {}
+  rpc DeleteEvent(DeleteEventRequest) returns (DeleteEventResponse) {}
+  rpc GetEvents(GetEventsRequest) returns (stream GetEventsResponse) {}
 }
 
 message MakeEventRequest {
@@ -17,9 +17,7 @@ message MakeEventRequest {
   string name = 3;
 }
 
-message MakeEventResponse {
-  int64 eventId = 1;
-}
+message MakeEventResponse { int64 eventId = 1; }
 
 message GetEventRequest {
   int64 senderId = 1;
@@ -38,12 +36,12 @@ message DeleteEventRequest {
   int64 eventId = 2;
 }
 
-message DeleteEventResponse {
-  int64 eventId = 1;
-}
+message DeleteEventResponse { int64 eventId = 1; }
 
 message GetEventsRequest {
   int64 senderId = 1;
+  int64 fromTime = 2;
+  int64 toTime = 3;
 }
 
 message GetEventsResponse {

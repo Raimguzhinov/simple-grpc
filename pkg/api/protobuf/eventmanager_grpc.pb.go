@@ -4,7 +4,7 @@
 // - protoc             v4.25.2
 // source: api/protobuf/eventmanager.proto
 
-package eventmanager
+package protobuf
 
 import (
 	context "context"

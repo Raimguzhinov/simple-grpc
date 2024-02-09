@@ -7,7 +7,9 @@ generate:
 		api/protobuf/eventmanager.proto
 
 server:
-	go run ./cmd/server -h 127.0.0.1 -p 50051
+	go build -o ./build/event_server ./cmd/server
+	./build/event_server -h 127.0.0.1 -p 50051
 
 client: 
-	go run ./cmd/client -dst 127.0.0.1 -p 50051 -sender-id 400
+	go build -o ./build/event_client ./cmd/client
+	./build/event_client -dst 127.0.0.1 -p 50051 -sender-id 400

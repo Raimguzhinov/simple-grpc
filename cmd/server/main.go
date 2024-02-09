@@ -21,8 +21,6 @@ func main() {
 	host = flag.String("h", "localhost", "host address")
 	port = flag.Int("p", 8080, "port number")
 	flag.Parse()
-	// t := time.UnixMilli(1707210178546)
-	// fmt.Printf("\ntime: %s\n", t)
 	lis, err := net.Listen("tcp", *host+":"+strconv.Itoa(*port))
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)

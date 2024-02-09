@@ -1,25 +1,13 @@
-package main
+package eventsrv
 
 import (
 	"context"
 	"errors"
-	"flag"
-	"log"
-	"net"
-	"strconv"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 
 	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
 )
 
-var (
-	host *string
-	port *int
-)
-
-type Events struct {
+type events struct {
 	ID       int64
 	SenderID int64
 	Time     int64
@@ -28,17 +16,17 @@ type Events struct {
 
 type Server struct {
 	eventmanager.UnimplementedEventsServer
-	EventsByClient map[int64]map[int64]Events
+	EventsByClient map[int64]map[int64]events
 }
 
 func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventRequest) (*eventmanager.MakeEventResponse, error) {
-	event := Events{
+	event := events{
 		SenderID: req.SenderId,
 		Time:     req.Time,
 		Name:     req.Name,
 	}
 	if _, isCreated := s.EventsByClient[req.SenderId]; !isCreated {
-		s.EventsByClient[req.SenderId] = make(map[int64]Events)
+		s.EventsByClient[req.SenderId] = make(map[int64]events)
 	}
 	event.ID = int64(len(s.EventsByClient[req.SenderId]) + 1)
 	s.EventsByClient[req.SenderId][event.ID] = event
@@ -98,25 +86,8 @@ func (s *Server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanag
 	return nil
 }
 
-func init() {
-	host = flag.String("h", "localhost", "host address")
-	port = flag.Int("p", 8080, "port number")
-}
-
-func main() {
-	flag.Parse()
-	lis, err := net.Listen("tcp", *host+":"+strconv.Itoa(*port))
-	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
-	}
-	s := grpc.NewServer()
-	reflection.Register(s)
-	server := &Server{
-		EventsByClient: make(map[int64]map[int64]Events),
-	}
-	eventmanager.RegisterEventsServer(s, server)
-	log.Printf("Listening on %s:%d", *host, *port)
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+func NewEventsServer() *Server {
+	return &Server{
+		EventsByClient: make(map[int64]map[int64]events),
 	}
 }

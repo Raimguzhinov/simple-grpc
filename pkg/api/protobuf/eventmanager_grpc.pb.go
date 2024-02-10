@@ -79,7 +79,7 @@ func (c *eventsClient) GetEvents(ctx context.Context, in *GetEventsRequest, opts
 }
 
 type Events_GetEventsClient interface {
-	Recv() (*GetEventsResponse, error)
+	Recv() (*Event, error)
 	grpc.ClientStream
 }
 
@@ -87,8 +87,8 @@ type eventsGetEventsClient struct {
 	grpc.ClientStream
 }
 
-func (x *eventsGetEventsClient) Recv() (*GetEventsResponse, error) {
-	m := new(GetEventsResponse)
+func (x *eventsGetEventsClient) Recv() (*Event, error) {
+	m := new(Event)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func _Events_GetEvents_Handler(srv interface{}, stream grpc.ServerStream) error 
 }
 
 type Events_GetEventsServer interface {
-	Send(*GetEventsResponse) error
+	Send(*Event) error
 	grpc.ServerStream
 }
 
@@ -206,7 +206,7 @@ type eventsGetEventsServer struct {
 	grpc.ServerStream
 }
 
-func (x *eventsGetEventsServer) Send(m *GetEventsResponse) error {
+func (x *eventsGetEventsServer) Send(m *Event) error {
 	return x.ServerStream.SendMsg(m)
 }
 

@@ -13,17 +13,11 @@ import (
 	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
 )
 
-var (
-	remote   *string
-	port     *int
-	senderID *int64
-)
-
 func main() {
 	var wg sync.WaitGroup
-	remote = flag.String("dst", "localhost", "remote address")
-	port = flag.Int("p", 8080, "port number")
-	senderID = flag.Int64("sender-id", 1, "sender id")
+	remote := flag.String("dst", "localhost", "remote address")
+	port := flag.Int("p", 8080, "port number")
+	senderID := flag.Int64("sender-id", 1, "sender id")
 	flag.Parse()
 	conn, err := grpc.Dial(*remote+":"+strconv.Itoa(*port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

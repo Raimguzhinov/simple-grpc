@@ -12,14 +12,9 @@ import (
 	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
 )
 
-var (
-	host *string
-	port *int
-)
-
 func main() {
-	host = flag.String("h", "localhost", "host address")
-	port = flag.Int("p", 8080, "port number")
+	host := flag.String("h", "localhost", "host address")
+	port := flag.Int("p", 8080, "port number")
 	flag.Parse()
 	lis, err := net.Listen("tcp", *host+":"+strconv.Itoa(*port))
 	if err != nil {

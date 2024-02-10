@@ -10,32 +10,31 @@ import (
 	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
 )
 
-var (
-	ProcedureName string
-	EventID       int64
-	EventName     string
-	Time          string
-	TimeFrom      string
-	TimeTo        string
-)
-
 func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
+	var (
+		procedureName string
+		eventID       int64
+		eventName     string
+		timeCer       string
+		timeFrom      string
+		timeTo        string
+	)
 	fmt.Println("Choose procedure: MakeEvent, GetEvent, DeleteEvent, GetEvents")
 	for {
 		fmt.Print("> ")
-		fmt.Scan(&ProcedureName)
-		switch ProcedureName {
+		fmt.Scan(&procedureName)
+		switch procedureName {
 		case "MakeEvent":
 			fmt.Print("Enter <time> as format 2006-01-02(15:04) and <event_name>: ")
-			fmt.Scan(&Time, &EventName)
-			datetime, err := time.Parse("2006-01-02(15:04)", Time)
+			fmt.Scan(&timeCer, &eventName)
+			datetime, err := time.Parse("2006-01-02(15:04)", timeCer)
 			if err != nil {
 				fmt.Println(err)
 			} else {
 				res, err := client.MakeEvent(context.Background(), &eventmanager.MakeEventRequest{
 					SenderId: *senderID,
 					Time:     datetime.UnixMilli(),
-					Name:     EventName,
+					Name:     eventName,
 				})
 				if err != nil {
 					fmt.Println(err)
@@ -44,12 +43,12 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 			}
 		case "GetEvent":
 			fmt.Print("Enter <event_id>: ")
-			if _, err := fmt.Scan(&EventID); err != nil {
+			if _, err := fmt.Scan(&eventID); err != nil {
 				fmt.Println(err)
 			} else {
 				res, err := client.GetEvent(context.Background(), &eventmanager.GetEventRequest{
 					SenderId: *senderID,
-					EventId:  EventID,
+					EventId:  eventID,
 				})
 				if err != nil {
 					parts := strings.Split(err.Error(), "desc = ")
@@ -61,12 +60,12 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 			}
 		case "DeleteEvent":
 			fmt.Print("Enter <event_id>: ")
-			if _, err := fmt.Scan(&EventID); err != nil {
+			if _, err := fmt.Scan(&eventID); err != nil {
 				fmt.Println(err)
 			} else {
 				res, err := client.DeleteEvent(context.Background(), &eventmanager.DeleteEventRequest{
 					SenderId: *senderID,
-					EventId:  EventID,
+					EventId:  eventID,
 				})
 				if err != nil {
 					parts := strings.Split(err.Error(), "desc = ")
@@ -77,11 +76,11 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 			}
 		case "GetEvents":
 			fmt.Print("Enter <from_time> <to_time> as format 2006-01-02(15:04): ")
-			if _, err := fmt.Scan(&TimeFrom, &TimeTo); err != nil {
+			if _, err := fmt.Scan(&timeFrom, &timeTo); err != nil {
 				fmt.Println(err)
 			} else {
-				datetimeFrom, err1 := time.Parse("2006-01-02(15:04)", TimeFrom)
-				datetimeTo, err2 := time.Parse("2006-01-02(15:04)", TimeTo)
+				datetimeFrom, err1 := time.Parse("2006-01-02(15:04)", timeFrom)
+				datetimeTo, err2 := time.Parse("2006-01-02(15:04)", timeTo)
 				if err1 != nil || err2 != nil {
 					fmt.Println(err1, err2)
 				} else {

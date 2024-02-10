@@ -19,6 +19,12 @@ type server struct {
 	eventsByClient map[int64]map[int64]events
 }
 
+func RunEventsServer() *server {
+	return &server{
+		eventsByClient: make(map[int64]map[int64]events),
+	}
+}
+
 func (s *server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventRequest) (*eventmanager.MakeEventResponse, error) {
 	event := events{
 		SenderID: req.SenderId,
@@ -79,12 +85,6 @@ func (s *server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanag
 		}
 	}
 	return nil
-}
-
-func NewEventsServer() *server {
-	return &server{
-		eventsByClient: make(map[int64]map[int64]events),
-	}
 }
 
 func accumulateEvent(event events) *eventmanager.Event {

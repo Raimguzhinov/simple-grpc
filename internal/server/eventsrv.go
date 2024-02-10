@@ -67,7 +67,7 @@ func (s *server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanag
 		for _, event := range eventsByClient {
 			if event.SenderID == senderID {
 				if req.FromTime < event.Time && event.Time < req.ToTime {
-					if err := stream.Send(makeEvent(event)); err != nil {
+					if err := stream.Send(accumulateEvent(event)); err != nil {
 						return err
 					}
 				} else {

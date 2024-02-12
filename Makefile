@@ -2,9 +2,13 @@ PHONY: generate
 
 generate:
 	mkdir -p pkg
-	protoc --go_out=pkg --go_opt=paths=source_relative \
-		--go-grpc_out=pkg --go-grpc_opt=paths=source_relative \
+	protoc --proto_path=api --go_out=. \
+		--go_opt=module=github.com/Raimguzhinov/simple-grpc \
+		--go-grpc_out=. --go-grpc_opt=module=github.com/Raimguzhinov/simple-grpc \
 		api/protobuf/eventmanager.proto
+	# protoc --go_out=pkg --go_opt=paths=source_relative \
+	# 	--go-grpc_out=pkg --go-grpc_opt=paths=source_relative \
+	# 	api/protobuf/eventmanager.proto
 
 server:
 	go build -o ./build/event_server ./cmd/server

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package eventmanager;
 
-option go_package = "https://github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf";
+option go_package = "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc";
 
 service Events {
   rpc MakeEvent(MakeEventRequest) returns (MakeEventResponse) {}

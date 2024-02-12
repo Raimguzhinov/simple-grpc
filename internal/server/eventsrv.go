@@ -3,6 +3,11 @@ package eventsrv
 import (
 	"context"
 	"errors"
+	"log"
+	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+	"google.golang.org/protobuf/proto"
 
 	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
 )
@@ -36,6 +41,8 @@ func (s *server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventReque
 	}
 	event.ID = int64(len(s.eventsByClient[req.SenderId]) + 1)
 	s.eventsByClient[req.SenderId][event.ID] = event
+	publish(event)
+
 	return &eventmanager.MakeEventResponse{
 		EventId: event.ID,
 	}, nil
@@ -94,4 +101,80 @@ func accumulateEvent(event events) *eventmanager.Event {
 		Time:     event.Time,
 		Name:     event.Name,
 	}
+}
+
+func publish(event events) {
+	go func() {
+		conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+		if err != nil {
+			panic(err)
+		}
+		defer conn.Close()
+
+		ch, err := conn.Channel()
+		if err != nil {
+			panic(err)
+		}
+		defer ch.Close()
+
+		if err := ch.ExchangeDeclare(
+			"events-exchange", // name
+			"direct",          // type
+			true,              // durable
+			false,             // auto-deleted
+			false,             // internal
+			false,             // no-wait
+			nil,               // arguments
+		); err != nil {
+			panic(err)
+		}
+
+		q, err := ch.QueueDeclare(
+			"events-queue", // name
+			true,           // durable
+			false,          // delete when unused
+			false,          // exclusive
+			false,          // noWait
+			nil,            // arguments
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		if err := ch.QueueBind(
+			q.Name,            // queue name
+			"events",          // routing key
+			"events-exchange", // exchange
+			false,             // noWait
+			nil,               // arguments
+		); err != nil {
+			panic(err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		t1 := time.Now().Local()
+		t2 := time.UnixMilli(event.Time)
+		timeDuration := t2.Sub(t1)
+		if timeDuration < 0 {
+			return
+		}
+		timer := time.NewTimer(timeDuration)
+		<-timer.C
+		body, err := proto.Marshal(accumulateEvent(event))
+		if err != nil {
+			panic(err)
+		}
+
+		err = ch.PublishWithContext(ctx, "events-exchange", "events", false, false, amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        body,
+		})
+		if err != nil {
+			panic(err)
+		}
+
+		log.Printf(" [x] Sent %s\n", body)
+	}()
 }

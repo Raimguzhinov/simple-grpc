@@ -1,4 +1,4 @@
-package eventsrv
+package service
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"google.golang.org/protobuf/proto"
 
-	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
+	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 type events struct {
@@ -25,7 +25,7 @@ type server struct {
 	eventsByClient map[int64]map[int64]events
 }
 
-func RunEventsServer() *server {
+func RunEventsService() *server {
 	return &server{
 		eventsByClient: make(map[int64]map[int64]events),
 	}

@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	eventclt "github.com/Raimguzhinov/simple-grpc/internal/client"
-	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
+	"github.com/Raimguzhinov/simple-grpc/internal/user"
+	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 func main() {
@@ -32,7 +32,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		eventclt.RunEventsClient(client, senderID)
+		user.RunEventsClient(client, senderID)
 	}()
 	wg.Wait()
 }

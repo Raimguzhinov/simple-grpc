@@ -1,4 +1,4 @@
-package eventclt
+package user
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"google.golang.org/protobuf/proto"
 
-	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
+	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {

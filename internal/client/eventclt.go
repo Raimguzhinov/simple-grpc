@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+	"google.golang.org/protobuf/proto"
 
 	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/api/protobuf"
 )
@@ -19,6 +23,13 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 		timeFrom      string
 		timeTo        string
 	)
+
+	exchange := "event.ex"
+	routingKey := strconv.Itoa(int(*senderID))
+	queueName := strconv.Itoa(int(*senderID))
+
+	go notifyHandler(&eventmanager.Event{}, exchange, routingKey, queueName)
+
 	fmt.Println("Choose procedure: MakeEvent, GetEvent, DeleteEvent, GetEvents")
 	for {
 		fmt.Print("> ")
@@ -130,4 +141,81 @@ func eventsGetter(client eventmanager.EventsClient, senderID *int64, timeFrom st
 			}
 		}
 	}
+}
+
+func notifyHandler(event *eventmanager.Event, exchange string, routingKey string, queueName string) {
+	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		panic(err)
+	}
+	defer ch.Close()
+
+	if err := ch.ExchangeDeclare(
+		exchange, // name
+		"direct", // type
+		true,     // durable
+		false,    // auto-deleted
+		false,    // internal
+		false,    // no-wait
+		nil,      // arguments
+	); err != nil {
+		panic(err)
+	}
+
+	q, err := ch.QueueDeclare(
+		queueName, // name
+		true,      // durable
+		false,     // delete when unused
+		false,     // exclusive
+		false,     // noWait
+		nil,       // arguments
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := ch.QueueBind(
+		q.Name,     // queue name
+		routingKey, // routing key
+		exchange,   // exchange
+		false,      // noWait
+		nil,        // arguments
+	); err != nil {
+		panic(err)
+	}
+
+	messages, err := ch.Consume(
+		q.Name,
+		"",
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		fmt.Printf("unable to consume messages. Error: %s", err)
+	}
+
+	var forever chan struct{}
+
+	go func() {
+		for message := range messages {
+			err := proto.Unmarshal(message.Body, event)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("Notification!")
+			t := time.UnixMilli(event.Time).Local().Format("2006-01-02(15:04)")
+			fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n> ", event.SenderId, event.EventId, t, event.Name)
+		}
+	}()
+
+	<-forever
 }

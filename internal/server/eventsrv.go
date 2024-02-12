@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strconv"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -104,6 +105,10 @@ func accumulateEvent(event events) *eventmanager.Event {
 }
 
 func publish(event events) {
+	exchange := "event.ex"
+	routingKey := strconv.Itoa(int(event.SenderID))
+	queueName := strconv.Itoa(int(event.SenderID))
+
 	go func() {
 		conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 		if err != nil {
@@ -118,35 +123,35 @@ func publish(event events) {
 		defer ch.Close()
 
 		if err := ch.ExchangeDeclare(
-			"events-exchange", // name
-			"direct",          // type
-			true,              // durable
-			false,             // auto-deleted
-			false,             // internal
-			false,             // no-wait
-			nil,               // arguments
+			exchange, // name
+			"direct", // type
+			true,     // durable
+			false,    // auto-deleted
+			false,    // internal
+			false,    // no-wait
+			nil,      // arguments
 		); err != nil {
 			panic(err)
 		}
 
 		q, err := ch.QueueDeclare(
-			"events-queue", // name
-			true,           // durable
-			false,          // delete when unused
-			false,          // exclusive
-			false,          // noWait
-			nil,            // arguments
+			queueName, // name
+			true,      // durable
+			false,     // delete when unused
+			false,     // exclusive
+			false,     // noWait
+			nil,       // arguments
 		)
 		if err != nil {
 			panic(err)
 		}
 
 		if err := ch.QueueBind(
-			q.Name,            // queue name
-			"events",          // routing key
-			"events-exchange", // exchange
-			false,             // noWait
-			nil,               // arguments
+			q.Name,     // queue name
+			routingKey, // routing key
+			exchange,   // exchange
+			false,      // noWait
+			nil,        // arguments
 		); err != nil {
 			panic(err)
 		}
@@ -167,14 +172,13 @@ func publish(event events) {
 			panic(err)
 		}
 
-		err = ch.PublishWithContext(ctx, "events-exchange", "events", false, false, amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        body,
+		err = ch.PublishWithContext(ctx, exchange, routingKey, false, false, amqp.Publishing{
+			Body: body,
 		})
 		if err != nil {
 			panic(err)
 		}
 
-		log.Printf(" [x] Sent %s\n", body)
+		log.Println("[x] Sent:", body)
 	}()
 }

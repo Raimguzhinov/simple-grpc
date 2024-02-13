@@ -33,7 +33,9 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 	fmt.Println("Choose procedure: MakeEvent, GetEvent, DeleteEvent, GetEvents")
 	for {
 		fmt.Print("> ")
-		fmt.Scan(&procedureName)
+		if _, err := fmt.Scan(&procedureName); err != nil {
+			fmt.Println(err)
+		}
 		switch procedureName {
 		case "MakeEvent":
 			eventMaker(client, senderID, dateCer, timeCer, eventName)
@@ -45,13 +47,17 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 			eventsGetter(client, senderID, dateFrom, timeFrom, dateTo, timeTo)
 		case "exit":
 			return
+		default:
+			fmt.Println("Bad Procedure Name")
 		}
 	}
 }
 
 func eventMaker(client eventmanager.EventsClient, senderID *int64, dateCer string, timeCer string, eventName string) {
 	fmt.Print("Enter <date> <time> <event_name>: ")
-	fmt.Scan(&dateCer, &timeCer, &eventName)
+	if _, err := fmt.Scan(&dateCer, &timeCer, &eventName); err != nil {
+		fmt.Println(err)
+	}
 	datetime, err := time.ParseInLocation(time.DateTime, dateCer+" "+timeCer, time.Local)
 	if err != nil {
 		fmt.Println(err)
@@ -107,7 +113,7 @@ func eventDeleter(client eventmanager.EventsClient, senderID *int64, eventID int
 
 func eventsGetter(client eventmanager.EventsClient, senderID *int64, dateFrom string, timeFrom string, dateTo string, timeTo string) {
 	fmt.Print("Enter <from_date> <from_time> <to_date> <to_time>: ")
-	if _, err := fmt.Scan(&dateFrom, &timeFrom, &dateTo, &timeFrom); err != nil {
+	if _, err := fmt.Scan(&dateFrom, &timeFrom, &dateTo, &timeTo); err != nil {
 		fmt.Println(err)
 	} else {
 		datetimeFrom, err1 := time.ParseInLocation(time.DateTime, dateFrom+" "+timeFrom, time.Local)
@@ -124,19 +130,17 @@ func eventsGetter(client eventmanager.EventsClient, senderID *int64, dateFrom st
 			if err != nil {
 				fmt.Println(err)
 			} else {
-				for {
+				for i := 0; ; i++ {
 					res, err := stream.Recv()
 					if err == io.EOF {
+						if i == 0 {
+							fmt.Println("Not found")
+						}
 						break
 					}
-					if err != nil {
-						parts := strings.Split(err.Error(), "desc = ")
-						fmt.Println(parts[1])
-						break
-					} else {
-						t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
-						fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n", res.SenderId, res.EventId, t, res.Name)
-					}
+					t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
+					fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n", res.SenderId, res.EventId, t, res.Name)
+
 				}
 			}
 		}

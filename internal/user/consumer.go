@@ -79,7 +79,7 @@ func notifyHandler(event *eventmanager.Event, exchange string, routingKey string
 				panic(err)
 			}
 			fmt.Println("Notification!")
-			t := time.UnixMilli(event.Time).Local().Format("2006-01-02(15:04)")
+			t := time.UnixMilli(event.Time).Local().Format(time.DateTime)
 			fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n> ", event.SenderId, event.EventId, t, event.Name)
 		}
 	}()

@@ -22,5 +22,11 @@ client2: broker
 broker:
 	docker start rabbitmq || docker run -it --rm --detach --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3.12-management
 
+test:
+	gotestsum --format github-actions ./internal/service/
+	gotestsum --format github-actions ./internal/user/
+	go test -cover ./internal/service/
+	go test -cover ./internal/user/
+
 stop: broker
 	docker stop rabbitmq

@@ -7,28 +7,28 @@ import (
 	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
-type server struct {
+type Server struct {
 	eventmanager.UnimplementedEventsServer
-	eventsByClient map[int64]map[int64]models.Events
+	EventsByClient map[int64]map[int64]models.Events
 }
 
-func RunEventsService() *server {
-	return &server{
-		eventsByClient: make(map[int64]map[int64]models.Events),
+func RunEventsService() *Server {
+	return &Server{
+		EventsByClient: make(map[int64]map[int64]models.Events),
 	}
 }
 
-func (s *server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventRequest) (*eventmanager.MakeEventResponse, error) {
+func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventRequest) (*eventmanager.MakeEventResponse, error) {
 	event := models.Events{
 		SenderID: req.SenderId,
 		Time:     req.Time,
 		Name:     req.Name,
 	}
-	if _, isCreated := s.eventsByClient[req.SenderId]; !isCreated {
-		s.eventsByClient[req.SenderId] = make(map[int64]models.Events)
+	if _, isCreated := s.EventsByClient[req.SenderId]; !isCreated {
+		s.EventsByClient[req.SenderId] = make(map[int64]models.Events)
 	}
-	event.ID = int64(len(s.eventsByClient[req.SenderId]) + 1)
-	s.eventsByClient[req.SenderId][event.ID] = event
+	event.ID = int64(len(s.EventsByClient[req.SenderId]) + 1)
+	s.EventsByClient[req.SenderId][event.ID] = event
 	publish(event)
 
 	return &eventmanager.MakeEventResponse{
@@ -36,8 +36,8 @@ func (s *server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventReque
 	}, nil
 }
 
-func (s *server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest) (*eventmanager.GetEventResponse, error) {
-	if eventsByClient, isCreated := s.eventsByClient[req.SenderId]; isCreated {
+func (s *Server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest) (*eventmanager.GetEventResponse, error) {
+	if eventsByClient, isCreated := s.EventsByClient[req.SenderId]; isCreated {
 		if event, isCreated := eventsByClient[req.EventId]; isCreated {
 			return &eventmanager.GetEventResponse{
 				SenderId: event.SenderID,
@@ -50,10 +50,10 @@ func (s *server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest
 	return nil, ErrEventNotFound
 }
 
-func (s *server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventRequest) (*eventmanager.DeleteEventResponse, error) {
-	if eventsByClient, isCreated := s.eventsByClient[req.SenderId]; isCreated {
+func (s *Server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventRequest) (*eventmanager.DeleteEventResponse, error) {
+	if eventsByClient, isCreated := s.EventsByClient[req.SenderId]; isCreated {
 		if _, isCreated := eventsByClient[req.EventId]; isCreated {
-			delete(s.eventsByClient[req.SenderId], req.EventId)
+			delete(s.EventsByClient[req.SenderId], req.EventId)
 			return &eventmanager.DeleteEventResponse{
 				EventId: req.EventId,
 			}, nil
@@ -62,9 +62,9 @@ func (s *server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventR
 	return nil, ErrEventNotFound
 }
 
-func (s *server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanager.Events_GetEventsServer) error {
+func (s *Server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanager.Events_GetEventsServer) error {
 	senderID := req.SenderId
-	for _, eventsByClient := range s.eventsByClient {
+	for _, eventsByClient := range s.EventsByClient {
 		for _, event := range eventsByClient {
 			if event.SenderID == senderID {
 				if req.FromTime < event.Time && event.Time < req.ToTime {

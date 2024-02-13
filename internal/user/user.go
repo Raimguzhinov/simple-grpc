@@ -16,6 +16,9 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 		procedureName string
 		eventID       int64
 		eventName     string
+		dateCer       string
+		dateFrom      string
+		dateTo        string
 		timeCer       string
 		timeFrom      string
 		timeTo        string
@@ -33,23 +36,23 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 		fmt.Scan(&procedureName)
 		switch procedureName {
 		case "MakeEvent":
-			eventMaker(client, senderID, timeCer, eventName)
+			eventMaker(client, senderID, dateCer, timeCer, eventName)
 		case "GetEvent":
 			eventGetter(client, senderID, eventID)
 		case "DeleteEvent":
 			eventDeleter(client, senderID, eventID)
 		case "GetEvents":
-			eventsGetter(client, senderID, timeFrom, timeTo)
+			eventsGetter(client, senderID, dateFrom, timeFrom, dateTo, timeTo)
 		case "exit":
 			return
 		}
 	}
 }
 
-func eventMaker(client eventmanager.EventsClient, senderID *int64, timeCer string, eventName string) {
-	fmt.Print("Enter <time> as format 2006-01-02(15:04) and <event_name>: ")
-	fmt.Scan(&timeCer, &eventName)
-	datetime, err := time.ParseInLocation("2006-01-02(15:04)", timeCer, time.Local)
+func eventMaker(client eventmanager.EventsClient, senderID *int64, dateCer string, timeCer string, eventName string) {
+	fmt.Print("Enter <date> <time> <event_name>: ")
+	fmt.Scan(&dateCer, &timeCer, &eventName)
+	datetime, err := time.ParseInLocation(time.DateTime, dateCer+" "+timeCer, time.Local)
 	if err != nil {
 		fmt.Println(err)
 	} else {
@@ -78,7 +81,7 @@ func eventGetter(client eventmanager.EventsClient, senderID *int64, eventID int6
 			parts := strings.Split(err.Error(), "desc = ")
 			fmt.Println(parts[1])
 		} else {
-			t := time.UnixMilli(res.Time).Local().Format("2006-01-02(15:04)")
+			t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
 			fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n", res.SenderId, res.EventId, t, res.Name)
 		}
 	}
@@ -102,13 +105,13 @@ func eventDeleter(client eventmanager.EventsClient, senderID *int64, eventID int
 	}
 }
 
-func eventsGetter(client eventmanager.EventsClient, senderID *int64, timeFrom string, timeTo string) {
-	fmt.Print("Enter <from_time> <to_time> as format 2006-01-02(15:04): ")
-	if _, err := fmt.Scan(&timeFrom, &timeTo); err != nil {
+func eventsGetter(client eventmanager.EventsClient, senderID *int64, dateFrom string, timeFrom string, dateTo string, timeTo string) {
+	fmt.Print("Enter <from_date> <from_time> <to_date> <to_time>: ")
+	if _, err := fmt.Scan(&dateFrom, &timeFrom, &dateTo, &timeFrom); err != nil {
 		fmt.Println(err)
 	} else {
-		datetimeFrom, err1 := time.ParseInLocation("2006-01-02(15:04)", timeFrom, time.Local)
-		datetimeTo, err2 := time.ParseInLocation("2006-01-02(15:04)", timeTo, time.Local)
+		datetimeFrom, err1 := time.ParseInLocation(time.DateTime, dateFrom+" "+timeFrom, time.Local)
+		datetimeTo, err2 := time.ParseInLocation(time.DateTime, dateTo+" "+timeTo, time.Local)
 
 		if err1 != nil || err2 != nil {
 			fmt.Println(err1, err2)
@@ -131,7 +134,7 @@ func eventsGetter(client eventmanager.EventsClient, senderID *int64, timeFrom st
 						fmt.Println(parts[1])
 						break
 					} else {
-						t := time.UnixMilli(res.Time).Local().Format("2006-01-02(15:04)")
+						t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
 						fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n", res.SenderId, res.EventId, t, res.Name)
 					}
 				}

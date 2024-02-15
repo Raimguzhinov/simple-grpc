@@ -10,11 +10,15 @@ import (
 type Server struct {
 	eventmanager.UnimplementedEventsServer
 	eventsByClient map[int64]map[int64]models.Events
+	eventsChan     chan models.Events
 }
 
 func RunEventsService() *Server {
+	pubChan := make(chan models.Events, 1)
+	publish(pubChan)
 	return &Server{
 		eventsByClient: make(map[int64]map[int64]models.Events),
+		eventsChan:     pubChan,
 	}
 }
 
@@ -29,8 +33,7 @@ func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventReque
 	}
 	event.ID = int64(len(s.eventsByClient[req.SenderId]) + 1)
 	s.eventsByClient[req.SenderId][event.ID] = event
-	publish(event)
-
+	s.eventsChan <- event
 	return &eventmanager.MakeEventResponse{
 		EventId: event.ID,
 	}, nil

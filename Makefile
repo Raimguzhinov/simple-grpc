@@ -7,26 +7,14 @@ generate:
 		--go-grpc_out=. --go-grpc_opt=module=github.com/Raimguzhinov/simple-grpc \
 		api/protobuf/eventmanager.proto
 
-server: broker
-	go build -o ./build/event_server ./cmd/server
-	./build/event_server -h 127.0.0.1 -p 50051
+compile:
+	go build -o ./build/ ./...
 
-client: broker
-	go build -o ./build/event_client ./cmd/client
-	./build/event_client -dst 127.0.0.1 -p 50051 -sender-id 400
-
-client2: broker
-	go build -o ./build/event_client ./cmd/client
-	./build/event_client -dst 127.0.0.1 -p 50051 -sender-id 500
+run:
+	./build/server
 
 broker:
 	docker start rabbitmq || docker run -it --rm --detach --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3.12-management
 
 test:
-	gotestsum --format github-actions ./internal/service/
-	gotestsum --format github-actions ./internal/user/
-	go test -cover ./internal/service/
-	go test -cover ./internal/user/
-
-stop: broker
-	docker stop rabbitmq
+	gotestsum --format pkgname --raw-command go test -json -cover ./...

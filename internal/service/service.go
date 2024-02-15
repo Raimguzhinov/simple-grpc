@@ -9,12 +9,12 @@ import (
 
 type Server struct {
 	eventmanager.UnimplementedEventsServer
-	EventsByClient map[int64]map[int64]models.Events
+	eventsByClient map[int64]map[int64]models.Events
 }
 
 func RunEventsService() *Server {
 	return &Server{
-		EventsByClient: make(map[int64]map[int64]models.Events),
+		eventsByClient: make(map[int64]map[int64]models.Events),
 	}
 }
 
@@ -24,11 +24,11 @@ func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventReque
 		Time:     req.Time,
 		Name:     req.Name,
 	}
-	if _, isCreated := s.EventsByClient[req.SenderId]; !isCreated {
-		s.EventsByClient[req.SenderId] = make(map[int64]models.Events)
+	if _, isCreated := s.eventsByClient[req.SenderId]; !isCreated {
+		s.eventsByClient[req.SenderId] = make(map[int64]models.Events)
 	}
-	event.ID = int64(len(s.EventsByClient[req.SenderId]) + 1)
-	s.EventsByClient[req.SenderId][event.ID] = event
+	event.ID = int64(len(s.eventsByClient[req.SenderId]) + 1)
+	s.eventsByClient[req.SenderId][event.ID] = event
 	publish(event)
 
 	return &eventmanager.MakeEventResponse{
@@ -37,7 +37,7 @@ func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventReque
 }
 
 func (s *Server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest) (*eventmanager.GetEventResponse, error) {
-	if eventsByClient, isCreated := s.EventsByClient[req.SenderId]; isCreated {
+	if eventsByClient, isCreated := s.eventsByClient[req.SenderId]; isCreated {
 		if event, isCreated := eventsByClient[req.EventId]; isCreated {
 			return &eventmanager.GetEventResponse{
 				SenderId: event.SenderID,
@@ -51,9 +51,9 @@ func (s *Server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest
 }
 
 func (s *Server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventRequest) (*eventmanager.DeleteEventResponse, error) {
-	if eventsByClient, isCreated := s.EventsByClient[req.SenderId]; isCreated {
+	if eventsByClient, isCreated := s.eventsByClient[req.SenderId]; isCreated {
 		if _, isCreated := eventsByClient[req.EventId]; isCreated {
-			delete(s.EventsByClient[req.SenderId], req.EventId)
+			delete(s.eventsByClient[req.SenderId], req.EventId)
 			return &eventmanager.DeleteEventResponse{
 				EventId: req.EventId,
 			}, nil
@@ -64,7 +64,7 @@ func (s *Server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventR
 
 func (s *Server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanager.Events_GetEventsServer) error {
 	senderID := req.SenderId
-	for _, eventsByClient := range s.EventsByClient {
+	for _, eventsByClient := range s.eventsByClient {
 		for _, event := range eventsByClient {
 			if event.SenderID == senderID {
 				if req.FromTime < event.Time && event.Time < req.ToTime {

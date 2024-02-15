@@ -22,6 +22,7 @@ func publish(event models.Events) {
 		if err != nil {
 			log.Fatalf("Unable to connect to RabbitMQ. Error: %s", err)
 		}
+		// conn.NotifyClose
 		defer conn.Close()
 
 		ch, err := conn.Channel()

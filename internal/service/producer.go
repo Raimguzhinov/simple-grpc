@@ -13,7 +13,10 @@ import (
 )
 
 func publish(pubChan chan models.Events) {
-	const exchange = "event.ex"
+	const (
+		exchange    = "event.ex"
+		reconnDelay = 5
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
@@ -21,14 +24,8 @@ func publish(pubChan chan models.Events) {
 		var conn *amqp.Connection
 		var ch *amqp.Channel
 
-		redial := func() {
+		rechannel := func() {
 			var err error
-			conn, err = amqp.Dial("amqp://guest:guest@localhost:5672/")
-			if err != nil {
-				log.Printf("Unable to connect to RabbitMQ. Error: %s", err)
-			} else {
-				log.Println("Connected to RabbitMQ")
-			}
 			ch, err = conn.Channel()
 			if err != nil {
 				log.Printf("Unable to open a channel. Error: %s", err)
@@ -46,14 +43,55 @@ func publish(pubChan chan models.Events) {
 			}
 		}
 
-		redial()
+		redial := func() error {
+			var err error
+			conn, err = amqp.Dial("amqp://guest:guest@localhost:5672/")
+			if err != nil {
+				log.Println("Unable to connect to RabbitMQ")
+				return err
+			}
+			log.Println("Connected to RabbitMQ")
+			defer rechannel()
+			return nil
+		}
+
+		for {
+			time.Sleep(reconnDelay * time.Second)
+			if err := redial(); err == nil {
+				break
+			}
+		}
 
 		go func() {
-			errChan := make(chan *amqp.Error)
-			conn.NotifyClose(errChan)
-			for err := range errChan {
-				log.Printf("Connection to RabbitMQ closed. Reconnecting... Reason: %v", err)
-				redial()
+			for {
+				reason, ok := <-conn.NotifyClose(make(chan *amqp.Error))
+				if !ok {
+					log.Println("Connection is closed gracefully or closed by devs. Won't reconnect")
+					break
+				}
+				log.Printf("Will reconnect because connection closed with reason: %v", reason)
+				for {
+					time.Sleep(reconnDelay * time.Second)
+					if err := redial(); err == nil {
+						break
+					}
+				}
+			}
+		}()
+
+		go func() {
+			for {
+				reason, ok := <-ch.NotifyClose(make(chan *amqp.Error))
+				if !ok || ch.IsClosed() {
+					log.Println("Channel is closed gracefully or closed by devs. Won't reconnect")
+					ch.Close() // close again, ensure closed flag set when connection closed
+					break
+				}
+				log.Printf("Will reconnect because channel is closed with reason: %v", reason)
+				for {
+					time.Sleep(reconnDelay * time.Second)
+					rechannel()
+				}
 			}
 		}()
 

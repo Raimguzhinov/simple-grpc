@@ -33,7 +33,9 @@ func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventReque
 	}
 	event.ID = int64(len(s.eventsByClient[req.SenderId]) + 1)
 	s.eventsByClient[req.SenderId][event.ID] = event
-	s.eventsChan <- event
+	go func() {
+		s.eventsChan <- event
+	}()
 	return &eventmanager.MakeEventResponse{
 		EventId: event.ID,
 	}, nil

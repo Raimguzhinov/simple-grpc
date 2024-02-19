@@ -58,13 +58,14 @@ func eventMaker(client eventmanager.EventsClient, senderID *int64, dateCer strin
 	if _, err := fmt.Scan(&dateCer, &timeCer, &eventName); err != nil {
 		fmt.Println(err)
 	}
-	datetime, err := time.ParseInLocation(time.DateTime, dateCer+" "+timeCer, time.Local)
+	locDateTime, err := time.ParseInLocation(time.DateTime, dateCer+" "+timeCer, time.Local)
+	dateTime := locDateTime.UTC()
 	if err != nil {
 		fmt.Println(err)
 	} else {
 		res, err := client.MakeEvent(context.Background(), &eventmanager.MakeEventRequest{
 			SenderId: *senderID,
-			Time:     datetime.UnixMilli(),
+			Time:     dateTime.UnixMilli(),
 			Name:     eventName,
 		})
 		if err != nil {
@@ -116,16 +117,18 @@ func eventsGetter(client eventmanager.EventsClient, senderID *int64, dateFrom st
 	if _, err := fmt.Scan(&dateFrom, &timeFrom, &dateTo, &timeTo); err != nil {
 		fmt.Println(err)
 	} else {
-		datetimeFrom, err1 := time.ParseInLocation(time.DateTime, dateFrom+" "+timeFrom, time.Local)
-		datetimeTo, err2 := time.ParseInLocation(time.DateTime, dateTo+" "+timeTo, time.Local)
+		locDateTimeFrom, err1 := time.ParseInLocation(time.DateTime, dateFrom+" "+timeFrom, time.Local)
+		locDateTimeTo, err2 := time.ParseInLocation(time.DateTime, dateTo+" "+timeTo, time.Local)
+		dateTimeFrom := locDateTimeFrom.UTC()
+		dateTimeTo := locDateTimeTo.UTC()
 
 		if err1 != nil || err2 != nil {
 			fmt.Println(err1, err2)
 		} else {
 			stream, err := client.GetEvents(context.Background(), &eventmanager.GetEventsRequest{
 				SenderId: *senderID,
-				FromTime: datetimeFrom.UnixMilli(),
-				ToTime:   datetimeTo.UnixMilli(),
+				FromTime: dateTimeFrom.UnixMilli(),
+				ToTime:   dateTimeTo.UnixMilli(),
 			})
 			if err != nil {
 				fmt.Println(err)

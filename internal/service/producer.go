@@ -25,13 +25,13 @@ func publish(pubChan chan models.Events) {
 			var err error
 			conn, err = amqp.Dial("amqp://guest:guest@localhost:5672/")
 			if err != nil {
-				log.Fatalf("Unable to connect to RabbitMQ. Error: %s", err)
+				log.Printf("Unable to connect to RabbitMQ. Error: %s", err)
 			} else {
 				log.Println("Connected to RabbitMQ")
 			}
 			ch, err = conn.Channel()
 			if err != nil {
-				log.Fatalf("Unable to open a channel. Error: %s", err)
+				log.Printf("Unable to open a channel. Error: %s", err)
 			}
 			if err := ch.ExchangeDeclare(
 				exchange, // exchange name
@@ -42,7 +42,7 @@ func publish(pubChan chan models.Events) {
 				false,    // no-wait
 				nil,      // arguments
 			); err != nil {
-				log.Fatalf("Unable to declare exchange. Error: %s", err)
+				log.Printf("Unable to declare exchange. Error: %s", err)
 			}
 		}
 
@@ -60,8 +60,8 @@ func publish(pubChan chan models.Events) {
 		for {
 			event := <-pubChan
 
-			t1 := time.Now().Local()
-			t2 := time.UnixMilli(event.Time)
+			t1 := time.Now().UTC()
+			t2 := time.UnixMilli(event.Time).UTC()
 			timeDuration := t2.Sub(t1)
 			if timeDuration < 0 {
 				return

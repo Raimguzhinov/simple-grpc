@@ -142,7 +142,6 @@ func eventsGetter(client eventmanager.EventsClient, senderID *int64, dateFrom st
 					}
 					t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
 					fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n", res.SenderId, res.EventId, t, res.Name)
-
 				}
 			}
 		}

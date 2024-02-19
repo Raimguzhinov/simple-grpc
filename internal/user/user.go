@@ -24,11 +24,10 @@ func RunEventsClient(client eventmanager.EventsClient, senderID *int64) {
 		timeTo        string
 	)
 
-	exchange := "event.ex"
 	routingKey := strconv.Itoa(int(*senderID))
 	queueName := strconv.Itoa(int(*senderID))
 
-	go notifyHandler(&eventmanager.Event{}, exchange, routingKey, queueName)
+	go notifyHandler(&eventmanager.Event{}, routingKey, queueName)
 
 	fmt.Println("Choose procedure: MakeEvent, GetEvent, DeleteEvent, GetEvents")
 	for {

@@ -17,12 +17,17 @@ func publish(pubChan chan models.Events) {
 		exchange    = "event.ex"
 		reconnDelay = 5
 	)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	go func() {
-		var conn *amqp.Connection
-		var ch *amqp.Channel
+		var (
+			conn *amqp.Connection
+			ch   *amqp.Channel
+		)
+		defer conn.Close()
+		defer ch.Close()
 
 		rechannel := func() {
 			var err error
@@ -56,10 +61,10 @@ func publish(pubChan chan models.Events) {
 		}
 
 		for {
-			time.Sleep(reconnDelay * time.Second)
 			if err := redial(); err == nil {
 				break
 			}
+			time.Sleep(reconnDelay * time.Second)
 		}
 
 		go func() {
@@ -69,7 +74,7 @@ func publish(pubChan chan models.Events) {
 					log.Println("Connection is closed gracefully or closed by devs. Won't reconnect")
 					break
 				}
-				log.Printf("Will reconnect because connection closed with reason: %v", reason)
+				log.Printf("Will reconnect because connection closed with reason: %v\n", reason)
 				for {
 					time.Sleep(reconnDelay * time.Second)
 					if err := redial(); err == nil {
@@ -87,7 +92,7 @@ func publish(pubChan chan models.Events) {
 					ch.Close() // close again, ensure closed flag set when connection closed
 					break
 				}
-				log.Printf("Will reconnect because channel is closed with reason: %v", reason)
+				log.Printf("Will reconnect because channel is closed with reason: %v\n", reason)
 				for {
 					time.Sleep(reconnDelay * time.Second)
 					rechannel()
@@ -102,7 +107,7 @@ func publish(pubChan chan models.Events) {
 			t2 := time.UnixMilli(event.Time).UTC()
 			timeDuration := t2.Sub(t1)
 			if timeDuration < 0 {
-				return
+				continue
 			}
 			timer := time.NewTimer(timeDuration)
 			<-timer.C
@@ -111,13 +116,25 @@ func publish(pubChan chan models.Events) {
 			if err != nil {
 				log.Fatalf("Unable to marshal event. Error: %s", err)
 			}
-			err = ch.PublishWithContext(ctx, exchange, strconv.Itoa(int(event.SenderID)), false, false, amqp.Publishing{
-				Body: body,
-			})
-			if err != nil {
-				log.Fatalf("Unable to publish event. Error: %s", err)
-			}
-			log.Println("[x] Sent:", body)
+
+			go func() {
+				for {
+					if err := ch.PublishWithContext(
+						ctx,
+						exchange,
+						strconv.Itoa(int(event.SenderID)),
+						false,
+						false,
+						amqp.Publishing{Body: body},
+					); err == nil {
+						log.Println("[x] Sent:", body)
+						break
+					} else {
+						log.Printf("Unable to publish event. Error: %s\n", err)
+					}
+					time.Sleep(reconnDelay * time.Second)
+				}
+			}()
 		}
 	}()
 }

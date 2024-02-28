@@ -68,19 +68,22 @@ func (s *Server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventR
 }
 
 func (s *Server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanager.Events_GetEventsServer) error {
-	senderID := req.SenderId
-	for _, eventsByClient := range s.eventsByClient {
+	foundEvent := false
+	if s.eventsByClient == nil {
+		return ErrEventNotFound
+	}
+	if eventsByClient, ok := s.eventsByClient[req.SenderId]; ok {
 		for _, event := range eventsByClient {
-			if event.SenderID == senderID {
-				if req.FromTime < event.Time && event.Time < req.ToTime {
-					if err := stream.Send(AccumulateEvent(event)); err != nil {
-						return err
-					}
-				} else {
+			if req.FromTime <= event.Time && event.Time <= req.ToTime {
+				foundEvent = true
+				if err := stream.Send(AccumulateEvent(event)); err != nil {
 					return ErrEventNotFound
 				}
 			}
 		}
+	}
+	if !foundEvent {
+		return nil
 	}
 	return nil
 }

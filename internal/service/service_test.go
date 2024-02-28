@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	"github.com/Raimguzhinov/simple-grpc/internal/service"
@@ -115,19 +116,24 @@ func mockEventMaker(s *service.Server, currentTime int64) error {
 	return nil
 }
 
-func TestGetEvent(t *testing.T) {
-	// Arrange:
+func setupTest(t *testing.T) *service.Server {
 	s := service.RunEventsService()
 	currentTime := time.Now().UnixMilli()
-	loc, _ := time.LoadLocation("America/New_York")
-
-	t.Run("MakingEvents", func(t *testing.T) {
+	t.Run("Mocking events", func(t *testing.T) {
 		err := mockEventMaker(s, currentTime)
 		if err != nil {
 			t.Error(err)
 		}
-		t.Log("Events created")
 	})
+	t.Log("Events created")
+	return s
+}
+
+func TestGetEvent(t *testing.T) {
+	// Arrange:
+	s := setupTest(t)
+	currentTime := time.Now().UnixMilli()
+	loc, _ := time.LoadLocation("America/New_York")
 
 	testTable := []struct {
 		actual   models.Events
@@ -229,16 +235,7 @@ func TestGetEvent(t *testing.T) {
 
 func TestDeleteEvent(t *testing.T) {
 	// Arrange:
-	s := service.RunEventsService()
-	currentTime := time.Now().UnixMilli()
-
-	t.Run("MakingEvents", func(t *testing.T) {
-		err := mockEventMaker(s, currentTime)
-		if err != nil {
-			t.Error(err)
-		}
-		t.Log("Events created")
-	})
+	s := setupTest(t)
 
 	testTable := []struct {
 		actual   models.Events
@@ -306,4 +303,70 @@ func TestDeleteEvent(t *testing.T) {
 		}
 		assert.Equal(t, testCase.expected.ID, resp.GetEventId())
 	}
+}
+
+func TestGetEvents(t *testing.T) {
+	// Arrange:
+	s := setupTest(t)
+	currentTime := time.Now()
+	oneYearAgo := currentTime.AddDate(-1, 0, 0).UnixMilli()
+	oneYearLater := currentTime.AddDate(1, 0, 0).UnixMilli()
+
+	mockStream := &mockEventStream{
+		sentEvents: make([]*eventmanager.Event, 0),
+	}
+
+	testTable := []struct {
+		actual   models.Events
+		expected []models.Events
+	}{
+		{
+			actual: models.Events{
+				SenderID: 1,
+			},
+			expected: []models.Events{
+				{
+					SenderID: 1,
+					ID:       1,
+					Time:     currentTime.UnixMilli(),
+					Name:     "User1",
+				},
+			},
+		},
+	}
+	// Act:
+	for i, testCase := range testTable {
+		req := &eventmanager.GetEventsRequest{
+			SenderId: testCase.actual.SenderID,
+			FromTime: oneYearAgo,
+			ToTime:   oneYearLater,
+		}
+		err := s.GetEvents(req, mockStream)
+		// Assert:
+		t.Logf("\nCalling TestGetEvents(\n  %v\n),\tresult:\n", testCase.actual)
+		for _, sentEvent := range mockStream.sentEvents {
+			t.Log(sentEvent)
+		}
+		if err != nil {
+			t.Log(err)
+			assert.Equal(t, err, service.ErrEventNotFound)
+		}
+		if len(mockStream.sentEvents) != i+1 {
+			t.Fatalf("Expected %d event to be sent, got %d", i+1, len(mockStream.sentEvents))
+		}
+		assert.Equal(t, mockStream.sentEvents[i].GetSenderId(), service.AccumulateEvent(testCase.expected[i]).GetSenderId())
+		assert.Equal(t, mockStream.sentEvents[i].GetEventId(), service.AccumulateEvent(testCase.expected[i]).GetEventId())
+		assert.Equal(t, mockStream.sentEvents[i].GetName(), service.AccumulateEvent(testCase.expected[i]).GetName())
+		assert.Equal(t, mockStream.sentEvents[i].GetTime(), service.AccumulateEvent(testCase.expected[i]).GetTime())
+	}
+}
+
+type mockEventStream struct {
+	sentEvents []*eventmanager.Event
+	grpc.ServerStream
+}
+
+func (m *mockEventStream) Send(event *eventmanager.Event) error {
+	m.sentEvents = append(m.sentEvents, event)
+	return nil
 }

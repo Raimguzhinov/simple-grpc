@@ -73,21 +73,19 @@ func (s *Server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanag
 		for _, event := range eventsByClient {
 			if event.SenderID == senderID {
 				if req.FromTime < event.Time && event.Time < req.ToTime {
-					if err := stream.Send(accumulateEvent(event)); err != nil {
+					if err := stream.Send(AccumulateEvent(event)); err != nil {
 						return err
 					}
 				} else {
 					return ErrEventNotFound
 				}
-			} else {
-				return ErrEventNotFound
 			}
 		}
 	}
 	return nil
 }
 
-func accumulateEvent(event models.Events) *eventmanager.Event {
+func AccumulateEvent(event models.Events) *eventmanager.Event {
 	return &eventmanager.Event{
 		SenderId: event.SenderID,
 		EventId:  event.ID,

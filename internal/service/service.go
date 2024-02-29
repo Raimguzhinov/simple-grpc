@@ -75,10 +75,10 @@ func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventReque
 	} else {
 		for e := s.eventsList.Back(); e != nil; e = e.Prev() {
 			item := models.Events(e.Value.(models.Events))
-			if event.Time > item.Time {
+			if event.Time >= item.Time {
 				eventPtr = s.eventsList.InsertAfter(event, e)
 				break
-			} else if e == s.eventsList.Front() && item.Time >= event.Time {
+			} else if e == s.eventsList.Front() && item.Time > event.Time {
 				eventPtr = s.eventsList.InsertBefore(event, e)
 				s.listChangingChannel <- true
 				break

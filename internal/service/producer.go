@@ -103,15 +103,6 @@ func publish(pubChan chan models.Events) {
 		for {
 			event := <-pubChan
 
-			t1 := time.Now().UTC()
-			t2 := time.UnixMilli(event.Time).UTC()
-			timeDuration := t2.Sub(t1)
-			if timeDuration < 0 {
-				continue
-			}
-			timer := time.NewTimer(timeDuration)
-			<-timer.C
-
 			body, err := proto.Marshal(AccumulateEvent(event))
 			if err != nil {
 				log.Fatalf("Unable to marshal event. Error: %s", err)

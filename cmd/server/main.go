@@ -14,11 +14,13 @@ import (
 )
 
 func main() {
-	host := flag.String("h", "localhost", "host address")
-	port := flag.Int("p", 8080, "port number")
+	var host string
+	var port uint
+	flag.StringVar(&host, "h", "localhost", "host address")
+	flag.UintVar(&port, "p", 8080, "port number")
 	flag.Parse()
 
-	lis, err := net.Listen("tcp", *host+":"+strconv.Itoa(*port))
+	lis, err := net.Listen("tcp", host+":"+strconv.Itoa(int(port)))
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
@@ -28,7 +30,7 @@ func main() {
 
 	eventsrv := service.RunEventsService()
 	eventmanager.RegisterEventsServer(s, eventsrv)
-	log.Printf("Listening on %s:%d", *host, *port)
+	log.Printf("Listening on %s:%d", host, port)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}

@@ -14,14 +14,17 @@ import (
 )
 
 func main() {
-	remote := flag.String("dst", "localhost", "remote address")
-	port := flag.Int("p", 8080, "port number")
-	senderID := flag.Int64("sender-id", 1, "sender id")
+	var remote string
+	var port uint
+	var senderID int64
+	flag.StringVar(&remote, "dst", "localhost", "remote address")
+	flag.UintVar(&port, "p", 8080, "port number")
+	flag.Int64Var(&senderID, "sender-id", 1, "sender id")
 	flag.Parse()
 
 	var wg sync.WaitGroup
 
-	conn, err := grpc.Dial(*remote+":"+strconv.Itoa(*port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(remote+":"+strconv.Itoa(int(port)), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to server: %v", err)
 	}

@@ -22,6 +22,10 @@ func RunEventsService() *Server {
 	}
 }
 
+func (s *Server) IsInitialized() bool {
+	return s.eventsByClient != nil && s.eventsChan != nil
+}
+
 func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventRequest) (*eventmanager.MakeEventResponse, error) {
 	event := models.Events{
 		SenderID: req.SenderId,

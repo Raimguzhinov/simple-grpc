@@ -45,7 +45,7 @@ func TestRunEventsService(t *testing.T) {
 func TestMakeEvent(t *testing.T) {
 	// Arrange:
 	s := service.RunEventsService()
-	currentTime := time.Now().UnixMilli()
+	oneMonthLater := time.Now().AddDate(0, 1, 0).UnixMilli()
 
 	testTable := []struct {
 		name     string
@@ -56,7 +56,7 @@ func TestMakeEvent(t *testing.T) {
 			name: "Test 1",
 			actual: models.Events{
 				SenderID: 1,
-				Time:     currentTime,
+				Time:     oneMonthLater,
 				Name:     "User1",
 			},
 			expected: models.Events{
@@ -67,7 +67,7 @@ func TestMakeEvent(t *testing.T) {
 			name: "Test 2",
 			actual: models.Events{
 				SenderID: 1,
-				Time:     currentTime,
+				Time:     oneMonthLater,
 				Name:     "User1Again",
 			},
 			expected: models.Events{
@@ -78,7 +78,7 @@ func TestMakeEvent(t *testing.T) {
 			name: "Test 3",
 			actual: models.Events{
 				SenderID: 2,
-				Time:     currentTime,
+				Time:     oneMonthLater,
 				Name:     "User2",
 			},
 			expected: models.Events{
@@ -89,7 +89,7 @@ func TestMakeEvent(t *testing.T) {
 			name: "Test 4",
 			actual: models.Events{
 				SenderID: 1,
-				Time:     currentTime,
+				Time:     oneMonthLater,
 				Name:     "User1AgainAgain",
 			},
 			expected: models.Events{
@@ -100,7 +100,7 @@ func TestMakeEvent(t *testing.T) {
 			name: "Test 5",
 			actual: models.Events{
 				SenderID: 2,
-				Time:     currentTime,
+				Time:     oneMonthLater,
 				Name:     "TestUser2Again",
 			},
 			expected: models.Events{
@@ -129,17 +129,17 @@ func TestMakeEvent(t *testing.T) {
 	}
 }
 
-func mockEventMaker(s *service.Server, currentTime int64) error {
-	oneMonthLater := time.UnixMilli(currentTime).AddDate(0, 1, 0).UnixMilli()
+func mockEventMaker(s *service.Server, givenTime int64) error {
+	oneMonthLater := time.UnixMilli(givenTime).AddDate(0, 1, 0).UnixMilli()
 	eventsData := []struct {
 		SenderId int64
 		Time     int64
 		Name     string
 	}{
-		{SenderId: 1, Time: currentTime, Name: "User1"},
-		{SenderId: 2, Time: currentTime, Name: "User2"},
+		{SenderId: 1, Time: givenTime, Name: "User1"},
+		{SenderId: 2, Time: givenTime, Name: "User2"},
 		{SenderId: 2, Time: oneMonthLater, Name: "User2Again"},
-		{SenderId: 3, Time: currentTime, Name: "User3"},
+		{SenderId: 3, Time: givenTime, Name: "User3"},
 	}
 
 	for _, eventData := range eventsData {
@@ -169,9 +169,9 @@ func setupTest(t *testing.T, currentTime time.Time) *service.Server {
 
 func TestGetEvent(t *testing.T) {
 	// Arrange:
-	currentTimeT := time.Now()
-	s := setupTest(t, currentTimeT)
-	currentTime := currentTimeT.UnixMilli()
+	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
+	s := setupTest(t, oneMonthLaterT)
+	oneMonthLater := oneMonthLaterT.UnixMilli()
 	loc, _ := time.LoadLocation("America/New_York")
 
 	testTable := []struct {
@@ -201,7 +201,7 @@ func TestGetEvent(t *testing.T) {
 			expected: models.Events{
 				SenderID: 1,
 				ID:       1,
-				Time:     currentTime,
+				Time:     oneMonthLater,
 				Name:     "User1",
 			},
 		},
@@ -214,7 +214,7 @@ func TestGetEvent(t *testing.T) {
 			expected: models.Events{
 				SenderID: 2,
 				ID:       1,
-				Time:     currentTime,
+				Time:     oneMonthLater,
 				Name:     "User2",
 			},
 		},
@@ -253,7 +253,7 @@ func TestGetEvent(t *testing.T) {
 			expected: models.Events{
 				SenderID: 3,
 				ID:       1,
-				Time:     time.UnixMilli(currentTime).In(loc).UnixMilli(),
+				Time:     time.UnixMilli(oneMonthLater).In(loc).UnixMilli(),
 				Name:     "User3",
 			},
 		},
@@ -283,8 +283,8 @@ func TestGetEvent(t *testing.T) {
 
 func TestDeleteEvent(t *testing.T) {
 	// Arrange:
-	currentTimeT := time.Now()
-	s := setupTest(t, currentTimeT)
+	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
+	s := setupTest(t, oneMonthLaterT)
 
 	testTable := []struct {
 		name     string
@@ -364,10 +364,11 @@ func TestDeleteEvent(t *testing.T) {
 
 func TestGetEvents(t *testing.T) {
 	// Arrange:
-	currentTime := time.Now()
-	s := setupTest(t, currentTime)
-	oneYearAgo := currentTime.AddDate(-1, 0, 0).UnixMilli()
-	oneYearLater := currentTime.AddDate(1, 0, 0).UnixMilli()
+	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
+	s := setupTest(t, oneMonthLaterT)
+	oneMonthLater := oneMonthLaterT.UnixMilli()
+	oneYearAgo := time.Now().AddDate(-1, 0, 0).UnixMilli()
+	oneYearLater := time.Now().AddDate(1, 0, 0).UnixMilli()
 
 	testTable := []struct {
 		name      string
@@ -393,7 +394,7 @@ func TestGetEvents(t *testing.T) {
 				{
 					SenderID: 1,
 					ID:       1,
-					Time:     currentTime.UnixMilli(),
+					Time:     oneMonthLater,
 					Name:     "User1",
 				},
 			},
@@ -408,13 +409,13 @@ func TestGetEvents(t *testing.T) {
 				{
 					SenderID: 2,
 					ID:       1,
-					Time:     currentTime.UnixMilli(),
+					Time:     oneMonthLater,
 					Name:     "User2",
 				},
 				{
 					SenderID: 2,
 					ID:       2,
-					Time:     currentTime.AddDate(0, 1, 0).UnixMilli(),
+					Time:     oneMonthLaterT.AddDate(0, 1, 0).UnixMilli(),
 					Name:     "User2Again",
 				},
 			},
@@ -429,7 +430,7 @@ func TestGetEvents(t *testing.T) {
 				{
 					SenderID: 3,
 					ID:       1,
-					Time:     currentTime.UnixMilli(),
+					Time:     oneMonthLater,
 					Name:     "User3",
 				},
 			},

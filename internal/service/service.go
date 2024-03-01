@@ -24,7 +24,7 @@ func RunEventsService() *Server {
 		eventsByClient:      make(map[int64]map[int64]*list.Element),
 		eventsList:          list.New(),
 		eventsChan:          pubChan,
-		listChangingChannel: make(chan bool),
+		listChangingChannel: make(chan bool, 1),
 	}
 	go srv.timerQueue()
 	return &srv
@@ -35,26 +35,25 @@ func (s *Server) IsInitialized() bool {
 }
 
 func (s *Server) timerQueue() {
-ResetTimer:
 	for {
-		if s.eventsList.Len() > 0 {
-			eventPtr := s.eventsList.Front()
-			event := eventPtr.Value.(models.Events)
-			t1 := time.Now().UTC()
-			t2 := time.UnixMilli(event.Time).UTC()
-			timeDuration := t2.Sub(t1)
-			timer := time.NewTimer(timeDuration)
+		if s.eventsList.Len() == 0 {
+			<-s.listChangingChannel
+			continue
+		}
+		eventPtr := s.eventsList.Front()
+		event := eventPtr.Value.(models.Events)
+		t1 := time.Now().UTC()
+		t2 := time.UnixMilli(event.Time).UTC()
+		timeDuration := t2.Sub(t1)
+		timer := time.NewTimer(timeDuration)
 
-			select {
-			case <-timer.C:
-				s.eventsChan <- event
-				delete(s.eventsByClient[event.SenderID], event.ID)
-				s.eventsList.Remove(eventPtr)
-				continue ResetTimer
-			case <-s.listChangingChannel:
-				timer.Stop()
-				continue ResetTimer
-			}
+		select {
+		case <-timer.C:
+			s.eventsChan <- event
+			delete(s.eventsByClient[event.SenderID], event.ID)
+			s.eventsList.Remove(eventPtr)
+		case <-s.listChangingChannel:
+			timer.Stop()
 		}
 	}
 }
@@ -62,19 +61,20 @@ ResetTimer:
 func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventRequest) (*eventmanager.MakeEventResponse, error) {
 	event := models.Events{
 		SenderID: req.SenderId,
+		ID:       int64(len(s.eventsByClient[req.SenderId]) + 1),
 		Time:     req.Time,
 		Name:     req.Name,
 	}
-	event.ID = int64(len(s.eventsByClient[req.SenderId]) + 1)
 	var eventPtr *list.Element
 	if _, isCreated := s.eventsByClient[req.SenderId]; !isCreated {
 		s.eventsByClient[req.SenderId] = make(map[int64]*list.Element)
 	}
 	if s.eventsList.Len() == 0 {
 		eventPtr = s.eventsList.PushBack(event)
+		s.listChangingChannel <- true
 	} else {
 		for e := s.eventsList.Back(); e != nil; e = e.Prev() {
-			item := models.Events(e.Value.(models.Events))
+			item := e.Value.(models.Events)
 			if event.Time >= item.Time {
 				eventPtr = s.eventsList.InsertAfter(event, e)
 				break

@@ -12,7 +12,7 @@ import (
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 )
 
-func publish(pubChan chan models.Events) {
+func publish(pubChan chan *models.Events) {
 	const (
 		exchange    = "event.ex"
 		reconnDelay = 5
@@ -103,7 +103,7 @@ func publish(pubChan chan models.Events) {
 		for {
 			event := <-pubChan
 
-			body, err := proto.Marshal(AccumulateEvent(event))
+			body, err := proto.Marshal(AccumulateEvent(*event))
 			if err != nil {
 				log.Fatalf("Unable to marshal event. Error: %s", err)
 			}

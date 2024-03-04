@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,72 +48,32 @@ func TestMakeEvent(t *testing.T) {
 	// Arrange:
 	s := service.RunEventsService()
 	oneMonthLater := time.Now().AddDate(0, 1, 0).UnixMilli()
-
-	testTable := []struct {
+	type testStruct struct {
 		name     string
 		actual   models.Events
 		expected models.Events
-	}{
-		{
-			name: "Test 1",
+	}
+	var testTable []testStruct
+	for i := 0; i < 100; i++ {
+		testTable = append(testTable, testStruct{
+			name: fmt.Sprintf("Test %d", i),
 			actual: models.Events{
-				SenderID: 1,
+				SenderID: int64(i),
 				Time:     oneMonthLater,
-				Name:     "User1",
+				Name:     fmt.Sprintf("User %d", i),
 			},
 			expected: models.Events{
 				ID: 1,
 			},
-		},
-		{
-			name: "Test 2",
-			actual: models.Events{
-				SenderID: 1,
-				Time:     oneMonthLater,
-				Name:     "User1Again",
-			},
-			expected: models.Events{
-				ID: 2,
-			},
-		},
-		{
-			name: "Test 3",
-			actual: models.Events{
-				SenderID: 2,
-				Time:     oneMonthLater,
-				Name:     "User2",
-			},
-			expected: models.Events{
-				ID: 1,
-			},
-		},
-		{
-			name: "Test 4",
-			actual: models.Events{
-				SenderID: 1,
-				Time:     oneMonthLater,
-				Name:     "User1AgainAgain",
-			},
-			expected: models.Events{
-				ID: 3,
-			},
-		},
-		{
-			name: "Test 5",
-			actual: models.Events{
-				SenderID: 2,
-				Time:     oneMonthLater,
-				Name:     "TestUser2Again",
-			},
-			expected: models.Events{
-				ID: 2,
-			},
-		},
+		})
 	}
 
+	var wg sync.WaitGroup
 	// Act:
 	for _, testCase := range testTable {
-		t.Run(testCase.name, func(t *testing.T) {
+		wg.Add(1)
+		go func(testCase testStruct) {
+			// t.Run(testCase.name, func(t *testing.T) {
 			req := &eventmanager.MakeEventRequest{
 				SenderId: testCase.actual.SenderID,
 				Time:     testCase.actual.Time,
@@ -125,8 +87,11 @@ func TestMakeEvent(t *testing.T) {
 				t.Errorf("TestMakeEvent(%v) got unexpected error", testCase.actual)
 			}
 			assert.Equal(t, testCase.expected.ID, resp.GetEventId())
-		})
+			wg.Done()
+			// })
+		}(testCase)
 	}
+	wg.Wait()
 }
 
 func mockEventMaker(s *service.Server, givenTime int64) error {

@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/Raimguzhinov/simple-grpc/internal/service"
-	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 	reflection.Register(s)
 
 	eventsrv := service.RunEventsService()
-	eventmanager.RegisterEventsServer(s, eventsrv)
+	eventctrl.RegisterEventsServer(s, eventsrv)
 	log.Printf("Listening on %s:%d", host, port)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)

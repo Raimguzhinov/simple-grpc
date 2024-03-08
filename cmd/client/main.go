@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/Raimguzhinov/simple-grpc/internal/user"
-	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 func main() {
@@ -24,13 +24,16 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	conn, err := grpc.Dial(remote+":"+strconv.Itoa(int(port)), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(
+		remote+":"+strconv.Itoa(int(port)),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		log.Fatalf("Failed to connect to server: %v", err)
 	}
 	defer conn.Close()
 
-	client := eventmanager.NewEventsClient(conn)
+	client := eventctrl.NewEventsClient(conn)
 
 	wg.Add(1)
 	go func() {

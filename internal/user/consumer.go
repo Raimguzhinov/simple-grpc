@@ -7,10 +7,10 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"google.golang.org/protobuf/proto"
 
-	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
-func notifyHandler(event *eventmanager.Event, routingKey string, queueName string) {
+func notifyHandler(event *eventctrl.Event, routingKey string, queueName string) {
 	const (
 		exchange    = "event.ex"
 		reconnDelay = 5
@@ -147,7 +147,13 @@ func notifyHandler(event *eventmanager.Event, routingKey string, queueName strin
 			}
 			fmt.Println("Notification!")
 			t := time.UnixMilli(event.Time).Local().Format(time.DateTime)
-			fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n> ", event.SenderId, event.EventId, t, event.Name)
+			fmt.Printf(
+				"Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n> ",
+				event.SenderId,
+				event.EventId,
+				t,
+				event.Name,
+			)
 		}
 	}()
 

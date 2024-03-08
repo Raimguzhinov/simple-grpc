@@ -1,6 +1,6 @@
 package models
 
-type Events struct {
+type Event struct {
 	ID       int64
 	SenderID int64
 	Time     int64

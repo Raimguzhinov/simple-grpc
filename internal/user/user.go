@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
-func RunEventsClient(client eventmanager.EventsClient, senderID int64) {
+func RunEventsClient(client eventctrl.EventsClient, senderID int64) {
 	var (
 		procedureName string
 		eventID       int64
@@ -27,7 +27,7 @@ func RunEventsClient(client eventmanager.EventsClient, senderID int64) {
 	routingKey := strconv.Itoa(int(senderID))
 	queueName := strconv.Itoa(int(senderID))
 
-	go notifyHandler(&eventmanager.Event{}, routingKey, queueName)
+	go notifyHandler(&eventctrl.Event{}, routingKey, queueName)
 
 	fmt.Println("Choose procedure: MakeEvent, GetEvent, DeleteEvent, GetEvents")
 	for {
@@ -52,7 +52,13 @@ func RunEventsClient(client eventmanager.EventsClient, senderID int64) {
 	}
 }
 
-func eventMaker(client eventmanager.EventsClient, senderID int64, dateCer string, timeCer string, eventName string) {
+func eventMaker(
+	client eventctrl.EventsClient,
+	senderID int64,
+	dateCer string,
+	timeCer string,
+	eventName string,
+) {
 	fmt.Print("Enter <date> <time> <event_name>: ")
 	if _, err := fmt.Scan(&dateCer, &timeCer, &eventName); err != nil {
 		fmt.Println(err)
@@ -62,7 +68,7 @@ func eventMaker(client eventmanager.EventsClient, senderID int64, dateCer string
 	if err != nil {
 		fmt.Println(err)
 	} else {
-		res, err := client.MakeEvent(context.Background(), &eventmanager.MakeEventRequest{
+		res, err := client.MakeEvent(context.Background(), &eventctrl.MakeEventRequest{
 			SenderId: senderID,
 			Time:     dateTime.UnixMilli(),
 			Name:     eventName,
@@ -74,12 +80,12 @@ func eventMaker(client eventmanager.EventsClient, senderID int64, dateCer string
 	}
 }
 
-func eventGetter(client eventmanager.EventsClient, senderID int64, eventID int64) {
+func eventGetter(client eventctrl.EventsClient, senderID int64, eventID int64) {
 	fmt.Print("Enter <event_id>: ")
 	if _, err := fmt.Scan(&eventID); err != nil {
 		fmt.Println(err)
 	} else {
-		res, err := client.GetEvent(context.Background(), &eventmanager.GetEventRequest{
+		res, err := client.GetEvent(context.Background(), &eventctrl.GetEventRequest{
 			SenderId: senderID,
 			EventId:  eventID,
 		})
@@ -93,12 +99,12 @@ func eventGetter(client eventmanager.EventsClient, senderID int64, eventID int64
 	}
 }
 
-func eventDeleter(client eventmanager.EventsClient, senderID int64, eventID int64) {
+func eventDeleter(client eventctrl.EventsClient, senderID int64, eventID int64) {
 	fmt.Print("Enter <event_id>: ")
 	if _, err := fmt.Scan(&eventID); err != nil {
 		fmt.Println(err)
 	} else {
-		res, err := client.DeleteEvent(context.Background(), &eventmanager.DeleteEventRequest{
+		res, err := client.DeleteEvent(context.Background(), &eventctrl.DeleteEventRequest{
 			SenderId: senderID,
 			EventId:  eventID,
 		})
@@ -111,7 +117,14 @@ func eventDeleter(client eventmanager.EventsClient, senderID int64, eventID int6
 	}
 }
 
-func eventsGetter(client eventmanager.EventsClient, senderID int64, dateFrom string, timeFrom string, dateTo string, timeTo string) {
+func eventsGetter(
+	client eventctrl.EventsClient,
+	senderID int64,
+	dateFrom string,
+	timeFrom string,
+	dateTo string,
+	timeTo string,
+) {
 	fmt.Print("Enter <from_date> <from_time> <to_date> <to_time>: ")
 	if _, err := fmt.Scan(&dateFrom, &timeFrom, &dateTo, &timeTo); err != nil {
 		fmt.Println(err)
@@ -124,7 +137,7 @@ func eventsGetter(client eventmanager.EventsClient, senderID int64, dateFrom str
 		if err1 != nil || err2 != nil {
 			fmt.Println(err1, err2)
 		} else {
-			stream, err := client.GetEvents(context.Background(), &eventmanager.GetEventsRequest{
+			stream, err := client.GetEvents(context.Background(), &eventctrl.GetEventsRequest{
 				SenderId: senderID,
 				FromTime: dateTimeFrom.UnixMilli(),
 				ToTime:   dateTimeTo.UnixMilli(),

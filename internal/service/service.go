@@ -3,6 +3,7 @@ package service
 import (
 	"container/list"
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -36,7 +37,7 @@ func RunEventsService() *Server {
 }
 
 func (s *Server) IsInitialized() bool {
-	return s.sessions != nil && s.brokerChan != nil
+	return s.eventsList != nil && s.sessions != nil && s.brokerChan != nil
 }
 
 func (s *Server) bypassTimer() {
@@ -76,10 +77,11 @@ func (s *Server) MakeEvent(
 	}
 	s.RUnlock()
 
-	if _, isCreated := s.sessions[req.SenderId]; !isCreated {
-		s.Lock()
+	s.Lock()
+	defer s.Unlock()
+	_, isCreated := s.sessions[req.SenderId]
+	if !isCreated {
 		s.sessions[req.SenderId] = make(map[int64]*list.Element)
-		s.Unlock()
 	}
 
 	var eventPtr *list.Element
@@ -99,10 +101,7 @@ func (s *Server) MakeEvent(
 			}
 		}
 	}
-
-	s.Lock()
 	s.sessions[req.SenderId][event.ID] = eventPtr
-	s.Unlock()
 
 	return &eventctrl.MakeEventResponse{
 		EventId: event.ID,
@@ -113,11 +112,13 @@ func (s *Server) GetEvent(
 	ctx context.Context,
 	req *eventctrl.GetEventRequest,
 ) (*eventctrl.GetEventResponse, error) {
-	// FIX: Add mutex lock
+	s.RLock()
+	defer s.RUnlock()
 
 	if eventsByClient, isCreated := s.sessions[req.SenderId]; isCreated {
 		if eventPtr, isCreated := eventsByClient[req.EventId]; isCreated {
 			event := eventPtr.Value.(*models.Event)
+
 			return &eventctrl.GetEventResponse{
 				SenderId: event.SenderID,
 				EventId:  event.ID,
@@ -133,6 +134,9 @@ func (s *Server) DeleteEvent(
 	ctx context.Context,
 	req *eventctrl.DeleteEventRequest,
 ) (*eventctrl.DeleteEventResponse, error) {
+	s.Lock()
+	defer s.Unlock()
+
 	if eventsByClient, isCreated := s.sessions[req.SenderId]; isCreated {
 		if eventPtr, isCreated := eventsByClient[req.EventId]; isCreated {
 			delete(s.sessions[req.SenderId], req.EventId)
@@ -155,21 +159,35 @@ func (s *Server) GetEvents(
 	req *eventctrl.GetEventsRequest,
 	stream eventctrl.Events_GetEventsServer,
 ) error {
+	s.Lock()
+	defer s.Unlock()
+
 	foundEvent := false
 	if s.sessions == nil {
 		return ErrEventNotFound
 	}
+
 	if eventsByClient, ok := s.sessions[req.SenderId]; ok {
+		var eventStream []*models.Event
 		for _, eventPtr := range eventsByClient {
 			event := eventPtr.Value.(*models.Event)
 			if req.FromTime <= event.Time && event.Time <= req.ToTime {
+				eventStream = append(eventStream, event)
 				foundEvent = true
-				if err := stream.Send(AccumulateEvent(*event)); err != nil {
-					return ErrEventNotFound
-				}
+			}
+		}
+
+		sort.Slice(eventStream, func(i, j int) bool {
+			return eventStream[i].ID < eventStream[j].ID
+		})
+
+		for _, event := range eventStream {
+			if err := stream.Send(AccumulateEvent(*event)); err != nil {
+				return ErrEventNotFound
 			}
 		}
 	}
+
 	if !foundEvent {
 		return nil
 	}

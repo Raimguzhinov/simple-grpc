@@ -12,7 +12,7 @@ import (
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 )
 
-func publish(pubChan chan models.Events) {
+func publish(pubChan chan *models.Event) {
 	const (
 		exchange    = "event.ex"
 		reconnDelay = 5
@@ -71,7 +71,9 @@ func publish(pubChan chan models.Events) {
 			for {
 				reason, ok := <-conn.NotifyClose(make(chan *amqp.Error))
 				if !ok {
-					log.Println("Connection is closed gracefully or closed by devs. Won't reconnect")
+					log.Println(
+						"Connection is closed gracefully or closed by devs. Won't reconnect",
+					)
 					break
 				}
 				log.Printf("Will reconnect because connection closed with reason: %v\n", reason)
@@ -103,7 +105,7 @@ func publish(pubChan chan models.Events) {
 		for {
 			event := <-pubChan
 
-			body, err := proto.Marshal(AccumulateEvent(event))
+			body, err := proto.Marshal(AccumulateEvent(*event))
 			if err != nil {
 				log.Fatalf("Unable to marshal event. Error: %s", err)
 			}

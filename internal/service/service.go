@@ -3,99 +3,123 @@ package service
 import (
 	"container/list"
 	"context"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
-	eventmanager "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 type Server struct {
-	eventmanager.UnimplementedEventsServer
-	eventsByClient      map[int64]map[int64]*list.Element
-	eventsList          *list.List
-	eventsChan          chan models.Events
-	listChangingChannel chan bool
+	eventctrl.UnimplementedEventsServer
+	sync.RWMutex
+
+	sessions    map[int64]map[int64]*list.Element
+	eventsList  *list.List
+	brokerChan  chan *models.Event
+	listUpdated chan bool
 }
 
 func RunEventsService() *Server {
-	pubChan := make(chan models.Events, 1)
+	pubChan := make(chan *models.Event, 1)
 	publish(pubChan)
+
 	srv := Server{
-		eventsByClient:      make(map[int64]map[int64]*list.Element),
-		eventsList:          list.New(),
-		eventsChan:          pubChan,
-		listChangingChannel: make(chan bool),
+		sessions:    make(map[int64]map[int64]*list.Element),
+		eventsList:  list.New(),
+		brokerChan:  pubChan,
+		listUpdated: make(chan bool, 1),
 	}
-	go srv.timerQueue()
+	go srv.bypassTimer()
+
 	return &srv
 }
 
 func (s *Server) IsInitialized() bool {
-	return s.eventsByClient != nil && s.eventsChan != nil
+	return s.eventsList != nil && s.sessions != nil && s.brokerChan != nil
 }
 
-func (s *Server) timerQueue() {
-ResetTimer:
+func (s *Server) bypassTimer() {
 	for {
-		if s.eventsList.Len() > 0 {
-			eventPtr := s.eventsList.Front()
-			event := eventPtr.Value.(models.Events)
-			t1 := time.Now().UTC()
-			t2 := time.UnixMilli(event.Time).UTC()
-			timeDuration := t2.Sub(t1)
-			timer := time.NewTimer(timeDuration)
+		if s.eventsList.Len() == 0 {
+			<-s.listUpdated
+			continue
+		}
+		eventPtr := s.eventsList.Front()
+		event := eventPtr.Value.(*models.Event)
+		t1 := time.Now().UTC()
+		t2 := time.UnixMilli(event.Time).UTC()
+		timeDuration := t2.Sub(t1)
+		timer := time.NewTimer(timeDuration)
 
-			select {
-			case <-timer.C:
-				s.eventsChan <- event
-				delete(s.eventsByClient[event.SenderID], event.ID)
-				s.eventsList.Remove(eventPtr)
-				continue ResetTimer
-			case <-s.listChangingChannel:
-				timer.Stop()
-				continue ResetTimer
-			}
+		select {
+		case <-timer.C:
+			s.brokerChan <- event
+			delete(s.sessions[event.SenderID], event.ID)
+			s.eventsList.Remove(eventPtr)
+		case <-s.listUpdated:
+			timer.Stop()
 		}
 	}
 }
 
-func (s *Server) MakeEvent(ctx context.Context, req *eventmanager.MakeEventRequest) (*eventmanager.MakeEventResponse, error) {
-	event := models.Events{
+func (s *Server) MakeEvent(
+	ctx context.Context,
+	req *eventctrl.MakeEventRequest,
+) (*eventctrl.MakeEventResponse, error) {
+	s.RLock()
+	event := &models.Event{
 		SenderID: req.SenderId,
+		ID:       int64(len(s.sessions[req.SenderId]) + 1),
 		Time:     req.Time,
 		Name:     req.Name,
 	}
-	event.ID = int64(len(s.eventsByClient[req.SenderId]) + 1)
-	var eventPtr *list.Element
-	if _, isCreated := s.eventsByClient[req.SenderId]; !isCreated {
-		s.eventsByClient[req.SenderId] = make(map[int64]*list.Element)
+	s.RUnlock()
+
+	s.Lock()
+	defer s.Unlock()
+	_, isCreated := s.sessions[req.SenderId]
+	if !isCreated {
+		s.sessions[req.SenderId] = make(map[int64]*list.Element)
 	}
+
+	var eventPtr *list.Element
 	if s.eventsList.Len() == 0 {
 		eventPtr = s.eventsList.PushBack(event)
+		s.listUpdated <- true
 	} else {
 		for e := s.eventsList.Back(); e != nil; e = e.Prev() {
-			item := models.Events(e.Value.(models.Events))
+			item := e.Value.(*models.Event)
 			if event.Time >= item.Time {
 				eventPtr = s.eventsList.InsertAfter(event, e)
 				break
 			} else if e == s.eventsList.Front() && item.Time > event.Time {
 				eventPtr = s.eventsList.InsertBefore(event, e)
-				s.listChangingChannel <- true
+				s.listUpdated <- true
 				break
 			}
 		}
 	}
-	s.eventsByClient[req.SenderId][event.ID] = eventPtr
-	return &eventmanager.MakeEventResponse{
+	s.sessions[req.SenderId][event.ID] = eventPtr
+
+	return &eventctrl.MakeEventResponse{
 		EventId: event.ID,
 	}, nil
 }
 
-func (s *Server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest) (*eventmanager.GetEventResponse, error) {
-	if eventsByClient, isCreated := s.eventsByClient[req.SenderId]; isCreated {
+func (s *Server) GetEvent(
+	ctx context.Context,
+	req *eventctrl.GetEventRequest,
+) (*eventctrl.GetEventResponse, error) {
+	s.RLock()
+	defer s.RUnlock()
+
+	if eventsByClient, isCreated := s.sessions[req.SenderId]; isCreated {
 		if eventPtr, isCreated := eventsByClient[req.EventId]; isCreated {
-			event := eventPtr.Value.(models.Events)
-			return &eventmanager.GetEventResponse{
+			event := eventPtr.Value.(*models.Event)
+
+			return &eventctrl.GetEventResponse{
 				SenderId: event.SenderID,
 				EventId:  event.ID,
 				Time:     event.Time,
@@ -106,16 +130,24 @@ func (s *Server) GetEvent(ctx context.Context, req *eventmanager.GetEventRequest
 	return nil, ErrEventNotFound
 }
 
-func (s *Server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventRequest) (*eventmanager.DeleteEventResponse, error) {
-	if eventsByClient, isCreated := s.eventsByClient[req.SenderId]; isCreated {
+func (s *Server) DeleteEvent(
+	ctx context.Context,
+	req *eventctrl.DeleteEventRequest,
+) (*eventctrl.DeleteEventResponse, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	if eventsByClient, isCreated := s.sessions[req.SenderId]; isCreated {
 		if eventPtr, isCreated := eventsByClient[req.EventId]; isCreated {
-			delete(s.eventsByClient[req.SenderId], req.EventId)
+			delete(s.sessions[req.SenderId], req.EventId)
+
 			frontItem := s.eventsList.Front().Value
 			s.eventsList.Remove(eventPtr)
+
 			if eventPtr.Value == frontItem {
-				s.listChangingChannel <- true
+				s.listUpdated <- true
 			}
-			return &eventmanager.DeleteEventResponse{
+			return &eventctrl.DeleteEventResponse{
 				EventId: req.EventId,
 			}, nil
 		}
@@ -123,30 +155,47 @@ func (s *Server) DeleteEvent(ctx context.Context, req *eventmanager.DeleteEventR
 	return nil, ErrEventNotFound
 }
 
-func (s *Server) GetEvents(req *eventmanager.GetEventsRequest, stream eventmanager.Events_GetEventsServer) error {
+func (s *Server) GetEvents(
+	req *eventctrl.GetEventsRequest,
+	stream eventctrl.Events_GetEventsServer,
+) error {
+	s.Lock()
+	defer s.Unlock()
+
 	foundEvent := false
-	if s.eventsByClient == nil {
+	if s.sessions == nil {
 		return ErrEventNotFound
 	}
-	if eventsByClient, ok := s.eventsByClient[req.SenderId]; ok {
+
+	if eventsByClient, ok := s.sessions[req.SenderId]; ok {
+		var eventStream []*models.Event
 		for _, eventPtr := range eventsByClient {
-			event := eventPtr.Value.(models.Events)
+			event := eventPtr.Value.(*models.Event)
 			if req.FromTime <= event.Time && event.Time <= req.ToTime {
+				eventStream = append(eventStream, event)
 				foundEvent = true
-				if err := stream.Send(AccumulateEvent(event)); err != nil {
-					return ErrEventNotFound
-				}
+			}
+		}
+
+		sort.Slice(eventStream, func(i, j int) bool {
+			return eventStream[i].ID < eventStream[j].ID
+		})
+
+		for _, event := range eventStream {
+			if err := stream.Send(AccumulateEvent(*event)); err != nil {
+				return ErrEventNotFound
 			}
 		}
 	}
+
 	if !foundEvent {
 		return nil
 	}
 	return nil
 }
 
-func AccumulateEvent(event models.Events) *eventmanager.Event {
-	return &eventmanager.Event{
+func AccumulateEvent(event models.Event) *eventctrl.Event {
+	return &eventctrl.Event{
 		SenderId: event.SenderID,
 		EventId:  event.ID,
 		Time:     event.Time,

@@ -79,8 +79,8 @@ func (s *Server) MakeEvent(
 
 	s.Lock()
 	defer s.Unlock()
-	_, isCreated := s.sessions[req.SenderId]
-	if !isCreated {
+
+	if _, isExist := s.sessions[req.SenderId]; !isExist {
 		s.sessions[req.SenderId] = make(map[int64]*list.Element)
 	}
 
@@ -137,7 +137,7 @@ func (s *Server) DeleteEvent(
 	s.Lock()
 	defer s.Unlock()
 
-	if eventsByClient, isCreated := s.sessions[req.SenderId]; isCreated {
+	if eventsByClient, isExist := s.sessions[req.SenderId]; isExist {
 		if eventPtr, isCreated := eventsByClient[req.EventId]; isCreated {
 			delete(s.sessions[req.SenderId], req.EventId)
 
@@ -167,7 +167,7 @@ func (s *Server) GetEvents(
 		return ErrEventNotFound
 	}
 
-	if eventsByClient, ok := s.sessions[req.SenderId]; ok {
+	if eventsByClient, isExist := s.sessions[req.SenderId]; isExist {
 		var eventStream []*models.Event
 		for _, eventPtr := range eventsByClient {
 			event := eventPtr.Value.(*models.Event)

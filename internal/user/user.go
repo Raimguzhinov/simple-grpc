@@ -1,41 +1,55 @@
 package user
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/erikgeiser/promptkit/confirmation"
+	"github.com/erikgeiser/promptkit/selection"
+	"github.com/erikgeiser/promptkit/textinput"
 
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 func RunEventsClient(client eventctrl.EventsClient, senderID int64) {
 	var (
-		procedureName string
-		eventID       int64
-		eventName     string
-		dateCer       string
-		dateFrom      string
-		dateTo        string
-		timeCer       string
-		timeFrom      string
-		timeTo        string
+		eventID   int64
+		eventName string
+		dateCer   string
+		dateFrom  string
+		dateTo    string
+		timeCer   string
+		timeFrom  string
+		timeTo    string
 	)
 
 	routingKey := strconv.Itoa(int(senderID))
 	queueName := strconv.Itoa(int(senderID))
 
-	go notifyHandler(&eventctrl.Event{}, routingKey, queueName)
+	f := bufio.NewWriter(os.Stdout)
+	go notifyHandler(&eventctrl.Event{}, routingKey, queueName, f)
 
 	fmt.Println("Choose procedure: MakeEvent, GetEvent, DeleteEvent, GetEvents")
 	for {
-		fmt.Print("> ")
-		if _, err := fmt.Scan(&procedureName); err != nil {
-			fmt.Println(err)
+		f.Flush()
+		sp := selection.New(
+			"\nWhat do you pick?",
+			[]string{"MakeEvent", "GetEvent", "DeleteEvent", "GetEvents", "exit"},
+		)
+		sp.PageSize = 4
+		choice, err := sp.RunPrompt()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v", err)
+			os.Exit(1)
 		}
-		switch procedureName {
+
+		switch choice {
 		case "MakeEvent":
 			eventMaker(client, senderID, dateCer, timeCer, eventName)
 		case "GetEvent":
@@ -45,7 +59,15 @@ func RunEventsClient(client eventctrl.EventsClient, senderID int64) {
 		case "GetEvents":
 			eventsGetter(client, senderID, dateFrom, timeFrom, dateTo, timeTo)
 		case "exit":
-			return
+			input := confirmation.New("Are you confirming the exit?", confirmation.Yes)
+			ready, err := input.RunPrompt()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v", err)
+				os.Exit(1)
+			}
+			if ready {
+				os.Exit(0)
+			}
 		default:
 			fmt.Println("Bad Procedure Name")
 		}
@@ -59,8 +81,20 @@ func eventMaker(
 	timeCer string,
 	eventName string,
 ) {
-	fmt.Print("Enter <date> <time> <event_name>: ")
-	if _, err := fmt.Scan(&dateCer, &timeCer, &eventName); err != nil {
+	input := textinput.New("Enter <date> <time> <event_name>:")
+	input.Placeholder = "Args cannot be empty"
+	input.Validate = func(input string) error {
+		if len(input) < 21 {
+			return fmt.Errorf("few arguments")
+		}
+		return nil
+	}
+	args, err := input.RunPrompt()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(1)
+	}
+	if _, err = fmt.Sscan(args, &dateCer, &timeCer, &eventName); err != nil {
 		fmt.Println(err)
 	}
 	locDateTime, err := time.ParseInLocation(time.DateTime, dateCer+" "+timeCer, time.Local)
@@ -81,8 +115,14 @@ func eventMaker(
 }
 
 func eventGetter(client eventctrl.EventsClient, senderID int64, eventID int64) {
-	fmt.Print("Enter <event_id>: ")
-	if _, err := fmt.Scan(&eventID); err != nil {
+	input := textinput.New("Enter <event_id>:")
+	input.Placeholder = "Arg cannot be empty"
+	arg, err := input.RunPrompt()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(1)
+	}
+	if _, err := fmt.Sscan(arg, &eventID); err != nil {
 		fmt.Println(err)
 	} else {
 		res, err := client.GetEvent(context.Background(), &eventctrl.GetEventRequest{
@@ -100,8 +140,14 @@ func eventGetter(client eventctrl.EventsClient, senderID int64, eventID int64) {
 }
 
 func eventDeleter(client eventctrl.EventsClient, senderID int64, eventID int64) {
-	fmt.Print("Enter <event_id>: ")
-	if _, err := fmt.Scan(&eventID); err != nil {
+	input := textinput.New("Enter <event_id>:")
+	input.Placeholder = "Arg cannot be empty"
+	arg, err := input.RunPrompt()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(1)
+	}
+	if _, err := fmt.Sscan(arg, &eventID); err != nil {
 		fmt.Println(err)
 	} else {
 		res, err := client.DeleteEvent(context.Background(), &eventctrl.DeleteEventRequest{
@@ -125,8 +171,20 @@ func eventsGetter(
 	dateTo string,
 	timeTo string,
 ) {
-	fmt.Print("Enter <from_date> <from_time> <to_date> <to_time>: ")
-	if _, err := fmt.Scan(&dateFrom, &timeFrom, &dateTo, &timeTo); err != nil {
+	input := textinput.New("Enter <from_date> <from_time> <to_date> <to_time>:")
+	input.Placeholder = "Args cannot be empty"
+	input.Validate = func(input string) error {
+		if len(input) <= 38 || len(input) > 39 {
+			return fmt.Errorf("few arguments")
+		}
+		return nil
+	}
+	args, err := input.RunPrompt()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(1)
+	}
+	if _, err = fmt.Sscan(args, &dateFrom, &timeFrom, &dateTo, &timeTo); err != nil {
 		fmt.Println(err)
 	} else {
 		locDateTimeFrom, err1 := time.ParseInLocation(time.DateTime, dateFrom+" "+timeFrom, time.Local)

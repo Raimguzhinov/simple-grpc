@@ -1,6 +1,7 @@
 package user
 
 import (
+	"bufio"
 	"fmt"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
-func notifyHandler(event *eventctrl.Event, routingKey string, queueName string) {
+func notifyHandler(event *eventctrl.Event, routingKey, queueName string, f *bufio.Writer) {
 	const (
 		exchange    = "event.ex"
 		reconnDelay = 5
@@ -29,7 +30,7 @@ func notifyHandler(event *eventctrl.Event, routingKey string, queueName string) 
 		if err != nil {
 			fmt.Printf("Unable to open a channel. Error: %s\n> ", err)
 		}
-		if err := ch.ExchangeDeclare(
+		if err = ch.ExchangeDeclare(
 			exchange, // exchange name
 			"direct", // type
 			true,     // durable
@@ -143,17 +144,22 @@ func notifyHandler(event *eventctrl.Event, routingKey string, queueName string) 
 		for message := range messagesChan {
 			err := proto.Unmarshal(message.Body, event)
 			if err != nil {
-				panic(err)
+				fmt.Printf("Error: %v\n", err)
+				return
 			}
-			fmt.Println("Notification!")
+
 			t := time.UnixMilli(event.Time).Local().Format(time.DateTime)
-			fmt.Printf(
-				"Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n> ",
+			str := fmt.Sprintf(
+				"\nNotification!\nEvent {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n",
 				event.SenderId,
 				event.EventId,
 				t,
 				event.Name,
 			)
+			if _, err := f.WriteString(str); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				return
+			}
 		}
 	}()
 

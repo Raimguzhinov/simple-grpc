@@ -48,6 +48,7 @@ func (s *Server) bypassTimer() {
 		}
 		eventPtr := s.eventsList.Front()
 		event := eventPtr.Value.(*models.Event)
+
 		t1 := time.Now().UTC()
 		t2 := time.UnixMilli(event.Time).UTC()
 		timeDuration := t2.Sub(t1)
@@ -56,8 +57,10 @@ func (s *Server) bypassTimer() {
 		select {
 		case <-timer.C:
 			s.brokerChan <- event
+			s.Lock()
 			delete(s.sessions[event.SenderID], event.ID)
 			s.eventsList.Remove(eventPtr)
+			s.Unlock()
 		case <-s.listUpdated:
 			timer.Stop()
 		}
@@ -67,7 +70,7 @@ func (s *Server) bypassTimer() {
 func (s *Server) MakeEvent(
 	ctx context.Context,
 	req *eventctrl.MakeEventRequest,
-) (*eventctrl.MakeEventResponse, error) {
+) (*eventctrl.EventIdAvail, error) {
 	s.RLock()
 	event := &models.Event{
 		SenderID: req.SenderId,
@@ -103,7 +106,7 @@ func (s *Server) MakeEvent(
 	}
 	s.sessions[req.SenderId][event.ID] = eventPtr
 
-	return &eventctrl.MakeEventResponse{
+	return &eventctrl.EventIdAvail{
 		EventId: event.ID,
 	}, nil
 }
@@ -111,7 +114,7 @@ func (s *Server) MakeEvent(
 func (s *Server) GetEvent(
 	ctx context.Context,
 	req *eventctrl.GetEventRequest,
-) (*eventctrl.GetEventResponse, error) {
+) (*eventctrl.Event, error) {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -119,7 +122,7 @@ func (s *Server) GetEvent(
 		if eventPtr, isCreated := eventsByClient[req.EventId]; isCreated {
 			event := eventPtr.Value.(*models.Event)
 
-			return &eventctrl.GetEventResponse{
+			return &eventctrl.Event{
 				SenderId: event.SenderID,
 				EventId:  event.ID,
 				Time:     event.Time,
@@ -133,7 +136,7 @@ func (s *Server) GetEvent(
 func (s *Server) DeleteEvent(
 	ctx context.Context,
 	req *eventctrl.DeleteEventRequest,
-) (*eventctrl.DeleteEventResponse, error) {
+) (*eventctrl.EventIdAvail, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -147,7 +150,7 @@ func (s *Server) DeleteEvent(
 			if eventPtr.Value == frontItem {
 				s.listUpdated <- true
 			}
-			return &eventctrl.DeleteEventResponse{
+			return &eventctrl.EventIdAvail{
 				EventId: req.EventId,
 			}, nil
 		}

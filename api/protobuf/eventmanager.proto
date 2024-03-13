@@ -5,10 +5,10 @@ package eventmanager;
 option go_package = "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc";
 
 service Events {
-  rpc MakeEvent(MakeEventRequest) returns (MakeEventResponse) {}
-  rpc GetEvent(GetEventRequest) returns (GetEventResponse) {}
-  rpc DeleteEvent(DeleteEventRequest) returns (DeleteEventResponse) {}
-  rpc GetEvents(GetEventsRequest) returns (stream Event) {}
+  rpc MakeEvent(MakeEventRequest) returns (EventIdAvail);
+  rpc GetEvent(GetEventRequest) returns (Event);
+  rpc DeleteEvent(DeleteEventRequest) returns (EventIdAvail);
+  rpc GetEvents(GetEventsRequest) returns (stream Event);
 }
 
 message MakeEventRequest {
@@ -17,18 +17,9 @@ message MakeEventRequest {
   string name = 3;
 }
 
-message MakeEventResponse { int64 eventId = 1; }
-
 message GetEventRequest {
   int64 senderId = 1;
   int64 eventId = 2;
-}
-
-message GetEventResponse {
-  int64 senderId = 1;
-  int64 eventId = 2;
-  int64 time = 3;
-  string name = 4;
 }
 
 message DeleteEventRequest {
@@ -36,12 +27,14 @@ message DeleteEventRequest {
   int64 eventId = 2;
 }
 
-message DeleteEventResponse { int64 eventId = 1; }
-
 message GetEventsRequest {
   int64 senderId = 1;
   int64 fromTime = 2;
   int64 toTime = 3;
+}
+
+message EventIdAvail {
+  int64 eventId = 1;
 }
 
 message Event {

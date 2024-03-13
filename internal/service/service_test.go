@@ -73,7 +73,7 @@ func TestMakeEvent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	type testResult struct {
-		resp     *eventcrtl.MakeEventResponse
+		resp     *eventcrtl.EventIdAvail
 		err      error
 		expected models.Event
 	}
@@ -246,7 +246,7 @@ func TestGetEvent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	type testResult struct {
-		resp     *eventcrtl.GetEventResponse
+		resp     *eventcrtl.Event
 		err      error
 		expected models.Event
 	}
@@ -352,7 +352,7 @@ func TestDeleteEvent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	type testResult struct {
-		resp     *eventcrtl.DeleteEventResponse
+		resp     *eventcrtl.EventIdAvail
 		err      error
 		expected models.Event
 	}

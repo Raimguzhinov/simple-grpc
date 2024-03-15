@@ -115,7 +115,7 @@ func TestMakeEvent(t *testing.T) {
 	}
 }
 
-func mockEventMaker(t *testing.T, s *service.Server, givenTime int64) error {
+func MockEventMaker(t *testing.T, s *service.Server, givenTime int64) error {
 	oneMonthLater := time.UnixMilli(givenTime).AddDate(0, 1, 0).UnixMilli()
 	eventsData := []struct {
 		SenderId int64
@@ -142,10 +142,10 @@ func mockEventMaker(t *testing.T, s *service.Server, givenTime int64) error {
 	return nil
 }
 
-func setupTest(t *testing.T, currentTime time.Time) *service.Server {
+func SetupTest(t *testing.T, currentTime time.Time) *service.Server {
 	s := service.RunEventsService()
 	t.Run("Mocking events", func(t *testing.T) {
-		err := mockEventMaker(t, s, currentTime.UnixMilli())
+		err := MockEventMaker(t, s, currentTime.UnixMilli())
 		if err != nil {
 			t.Error(err)
 		}
@@ -158,7 +158,7 @@ func TestGetEvent(t *testing.T) {
 	t.Parallel()
 	// Arrange:
 	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
-	s := setupTest(t, oneMonthLaterT)
+	s := SetupTest(t, oneMonthLaterT)
 	oneMonthLater := oneMonthLaterT.UnixMilli()
 	loc, _ := time.LoadLocation("America/New_York")
 
@@ -294,7 +294,7 @@ func TestDeleteEvent(t *testing.T) {
 	t.Parallel()
 	// Arrange:
 	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
-	s := setupTest(t, oneMonthLaterT)
+	s := SetupTest(t, oneMonthLaterT)
 
 	var testTable []testStruct
 	testTable = append(testTable,
@@ -396,7 +396,7 @@ func TestGetEvents(t *testing.T) {
 	t.Parallel()
 	// Arrange:
 	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
-	s := setupTest(t, oneMonthLaterT)
+	s := SetupTest(t, oneMonthLaterT)
 	oneMonthLater := oneMonthLaterT.UnixMilli()
 	oneYearAgo := time.Now().AddDate(-1, 0, 0).UnixMilli()
 	oneYearLater := time.Now().AddDate(1, 0, 0).UnixMilli()
@@ -509,7 +509,7 @@ func TestGetEvents(t *testing.T) {
 				ToTime:   testCase.timerange[1],
 			}
 			mockStream = &mockEventStream{
-				sentEvents: make([]*eventcrtl.Event, 0),
+				SentEvents: make([]*eventcrtl.Event, 0),
 			}
 			err := s.GetEvents(req, mockStream)
 			if err != nil {
@@ -517,9 +517,9 @@ func TestGetEvents(t *testing.T) {
 				assert.Equal(t, err, service.ErrEventNotFound)
 				return
 			}
-			t.Log(mockStream.sentEvents)
+			t.Log(mockStream.SentEvents)
 
-			for i, resp := range mockStream.sentEvents {
+			for i, resp := range mockStream.SentEvents {
 				t.Logf("\nCalling TestGetEvents(\n  %v\n),\nresult: %v\n\n", testCase.actual, resp)
 				resultCh <- testResult{resp, err, service.AccumulateEvent(testCase.expected[i])}
 			}
@@ -541,12 +541,12 @@ func TestGetEvents(t *testing.T) {
 }
 
 type mockEventStream struct {
-	sentEvents []*eventcrtl.Event
+	SentEvents []*eventcrtl.Event
 	grpc.ServerStream
 }
 
 func (m *mockEventStream) Send(event *eventcrtl.Event) error {
-	m.sentEvents = append(m.sentEvents, event)
+	m.SentEvents = append(m.SentEvents, event)
 	return nil
 }
 

@@ -3,19 +3,37 @@ package user_test
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 
+	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
+type testStruct struct {
+	name     string
+	actual   models.Event
+	expected models.Event
+}
+
 type MockClientConn struct {
-	mockMethods map[string]any
-	status      string
+	mockMethods map[string]func(ctx context.Context, args, reply any, opts ...grpc.CallOption) error
+}
+
+func NewMockClientConn() *MockClientConn {
+	return &MockClientConn{
+		make(map[string]func(ctx context.Context, args, reply any, opts ...grpc.CallOption) error),
+	}
+}
+
+func (m *MockClientConn) MockMethod(
+	method string,
+	mockFunc func(ctx context.Context, args, reply any, opts ...grpc.CallOption) error,
+) {
+	m.mockMethods[method] = mockFunc
 }
 
 func (m *MockClientConn) Invoke(
@@ -25,39 +43,10 @@ func (m *MockClientConn) Invoke(
 	reply any,
 	opts ...grpc.CallOption,
 ) error {
-	if m.mockMethods == nil {
-		m.mockMethods = make(map[string]any)
-	}
-	if strings.Contains(method, "MakeEvent") || strings.Contains(method, "DeleteEvent") {
-		m.mockMethods[method] = func() any {
-			return &eventctrl.EventIdAvail{EventId: 12345}
-		}
-	}
-	if strings.Contains(method, "GetEvent") {
-		m.mockMethods[method] = func() any {
-			return &eventctrl.Event{
-				SenderId: 12345,
-				EventId:  12345,
-				Time:     12345,
-				Name:     "test",
-			}
-		}
-	}
 	if methodFunc, ok := m.mockMethods[method]; ok {
-		if fn, ok := methodFunc.(func() any); ok {
-			result := fn()
-			m.status = fmt.Sprintln(result)
-
-			switch v := result.(type) {
-			case *eventctrl.EventIdAvail:
-				*reply.(*eventctrl.EventIdAvail) = *v
-			case *eventctrl.Event:
-				*reply.(*eventctrl.Event) = *v
-			default:
-				return errors.New("unexpected result type")
-			}
-		} else {
-			return errors.New("unexpected function type")
+		err := methodFunc(ctx, args, reply)
+		if err != nil {
+			return err
 		}
 	} else {
 		return errors.New("method not found")
@@ -75,43 +64,132 @@ func (m *MockClientConn) NewStream(
 }
 
 func TestMakeEvent(t *testing.T) {
-	mockConn := &MockClientConn{}
+	mockConn := NewMockClientConn()
+	currentTime := time.Now().UnixMilli()
+
 	client := eventctrl.NewEventsClient(mockConn)
 
-	ctx := context.Background()
-	request := &eventctrl.MakeEventRequest{
-		// TODO: fill
-		// struct
-		SenderId: 1,
-		Time:     1432423,
-		Name:     "User1",
-	}
+	mockConn.MockMethod(
+		eventctrl.Events_MakeEvent_FullMethodName,
+		func(ctx context.Context, args, reply any, opts ...grpc.CallOption) error {
+			req := args.(*eventctrl.MakeEventRequest)
+			resp := reply.(*eventctrl.EventIdAvail)
+			resp.EventId = 12345
+			_ = req
+			return nil
+		},
+	)
 
-	response, err := client.MakeEvent(ctx, request)
-	if err != nil {
-		t.Fatal(err)
+	ctx := context.Background()
+
+	var testTable []testStruct
+	testTable = append(testTable,
+		testStruct{
+			name: "Test 1",
+			actual: models.Event{
+				SenderID: 1,
+				Time:     currentTime,
+				Name:     "test",
+			},
+			expected: models.Event{
+				ID: 12345,
+			},
+		},
+		testStruct{
+			name: "Test 2",
+			actual: models.Event{
+				SenderID: 2,
+				Time:     currentTime,
+				Name:     "test",
+			},
+			expected: models.Event{
+				ID: 12345,
+			},
+		},
+	)
+
+	for _, testCase := range testTable {
+		t.Run(testCase.name, func(t *testing.T) {
+			request := &eventctrl.MakeEventRequest{
+				SenderId: testCase.actual.SenderID,
+				Time:     testCase.actual.Time,
+				Name:     testCase.actual.Name,
+			}
+			response, err := client.MakeEvent(ctx, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, int64(12345), response.EventId)
+		})
 	}
-	assert.Equal(t, int64(12345), response.EventId)
 }
 
 func TestGetEvent(t *testing.T) {
-	mockConn := &MockClientConn{}
+	mockConn := NewMockClientConn()
+	currentTime := time.Now().UnixMilli()
+
 	client := eventctrl.NewEventsClient(mockConn)
 
-	ctx := context.Background()
-	request := &eventctrl.GetEventRequest{
-		// TODO: fill
-		// struct
-		SenderId: 1,
-		EventId:  1,
-	}
+	mockConn.MockMethod(
+		eventctrl.Events_GetEvent_FullMethodName,
+		func(ctx context.Context, args, reply any, opts ...grpc.CallOption) error {
+			req := args.(*eventctrl.GetEventRequest)
+			resp := reply.(*eventctrl.Event)
 
-	response, err := client.GetEvent(ctx, request)
-	if err != nil {
-		t.Fatal(err)
+			resp.EventId = req.EventId
+			resp.SenderId = req.SenderId
+			resp.Time = currentTime
+			resp.Name = "test"
+			return nil
+		},
+	)
+
+	ctx := context.Background()
+
+	var testTable []testStruct
+	testTable = append(testTable,
+		testStruct{
+			name: "Test 1",
+			actual: models.Event{
+				SenderID: 1,
+				ID:       1,
+			},
+			expected: models.Event{
+				SenderID: 1,
+				ID:       1,
+				Time:     currentTime,
+				Name:     "test",
+			},
+		},
+		testStruct{
+			name: "Test 2",
+			actual: models.Event{
+				SenderID: 2,
+				ID:       2,
+			},
+			expected: models.Event{
+				SenderID: 2,
+				ID:       2,
+				Time:     currentTime,
+				Name:     "test",
+			},
+		},
+	)
+
+	for _, testCase := range testTable {
+		t.Run(testCase.name, func(t *testing.T) {
+			request := &eventctrl.GetEventRequest{
+				SenderId: testCase.actual.SenderID,
+				EventId:  testCase.actual.ID,
+			}
+			response, err := client.GetEvent(ctx, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, testCase.expected.SenderID, response.SenderId)
+			assert.Equal(t, testCase.expected.ID, response.EventId)
+			assert.Equal(t, testCase.expected.Time, response.Time)
+			assert.Equal(t, testCase.expected.Name, response.Name)
+		})
 	}
-	assert.Equal(t, int64(12345), response.SenderId)
-	assert.Equal(t, int64(12345), response.EventId)
-	assert.Equal(t, int64(12345), response.Time)
-	assert.Equal(t, "test", response.Name)
 }

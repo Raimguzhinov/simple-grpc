@@ -52,6 +52,10 @@ func (s *Server) bypassTimer() {
 		t1 := time.Now().UTC()
 		t2 := time.UnixMilli(event.Time).UTC()
 		timeDuration := t2.Sub(t1)
+		if timeDuration <= 0 {
+			s.passedEvents(t1)
+			continue
+		}
 		timer := time.NewTimer(timeDuration)
 
 		select {
@@ -64,6 +68,24 @@ func (s *Server) bypassTimer() {
 		case <-s.listUpdated:
 			timer.Stop()
 		}
+	}
+}
+
+func (s *Server) passedEvents(currentTime time.Time) {
+	for e := s.eventsList.Front(); e != nil; e = e.Next() {
+		event := e.Value.(*models.Event)
+		eventTime := time.UnixMilli(event.Time).UTC()
+		timeDuration := eventTime.Sub(currentTime)
+
+		if timeDuration <= 0 {
+			s.brokerChan <- event
+			s.Lock()
+			delete(s.sessions[event.SenderID], event.ID)
+			s.eventsList.Remove(e)
+			s.Unlock()
+			continue
+		}
+		return
 	}
 }
 

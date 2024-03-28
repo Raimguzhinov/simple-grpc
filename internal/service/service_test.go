@@ -65,9 +65,7 @@ func TestMakeEvent(t *testing.T) {
 				Time:     oneMonthLater,
 				Name:     fmt.Sprintf("User %d", i),
 			},
-			expected: models.Event{
-				ID: 1,
-			},
+			expected: models.Event{ID: 1},
 		})
 	}
 
@@ -100,6 +98,93 @@ func TestMakeEvent(t *testing.T) {
 				resp.GetEventId(),
 			)
 			resultCh <- testResult{resp, err, testCase.expected}
+		}(testCase)
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	// Assert:
+	for res := range resultCh {
+		assert.Nil(t, res.err)
+		assert.Equal(t, res.expected.ID, res.resp.GetEventId())
+	}
+}
+
+func TestMakeEventMultiSession(t *testing.T) {
+	t.Parallel()
+	// Arrange:
+	s := service.RunEventsService()
+	oneMonthLater := time.Now().AddDate(0, 1, 0).UnixMilli()
+
+	var testTable []testStruct
+	expectedEvents := 2
+
+	for i := 0; i < 100; i += expectedEvents {
+		testTable = append(testTable,
+			testStruct{
+				name: fmt.Sprintf("Test %d", i),
+				actual: models.Event{
+					SenderID: int64(i),
+					Time:     oneMonthLater,
+					Name:     fmt.Sprintf("User %d Maybe First", i),
+				},
+			},
+			testStruct{
+				name: fmt.Sprintf("Test %d", i+1),
+				actual: models.Event{
+					SenderID: int64(i),
+					Time:     oneMonthLater,
+					Name:     fmt.Sprintf("User %d Maybe Again", i),
+				},
+			},
+		)
+	}
+
+	var wg sync.WaitGroup
+	type testResult struct {
+		resp     *eventcrtl.EventIdAvail
+		err      error
+		expected models.Event
+	}
+	resultCh := make(chan testResult, 1)
+	eventsExists := make(map[int64]bool)
+	var mu sync.Mutex
+
+	// Act:
+	for _, testCase := range testTable {
+		wg.Add(1)
+		go func(testCase testStruct) {
+			defer wg.Done()
+			mu.Lock()
+			defer mu.Unlock()
+
+			req := &eventcrtl.MakeEventRequest{
+				SenderId: testCase.actual.SenderID,
+				Time:     testCase.actual.Time,
+				Name:     testCase.actual.Name,
+			}
+			resp, err := s.MakeEvent(context.Background(), req)
+			if err != nil {
+				err = fmt.Errorf(
+					"TestMakeEventMultiSession(%v) got unexpected error",
+					testCase.actual,
+				)
+			}
+			t.Logf(
+				"\nCalling TestMakeEventMultiSession(\n  %v\n),\nresult: %v\n\n",
+				testCase.actual,
+				resp.GetEventId(),
+			)
+
+			senderID := testCase.actual.SenderID
+			if _, ok := eventsExists[senderID]; ok {
+				resultCh <- testResult{resp, err, models.Event{ID: int64(expectedEvents)}}
+			} else {
+				eventsExists[senderID] = true
+			}
 		}(testCase)
 	}
 
@@ -551,40 +636,52 @@ func (m *mockEventStream) Send(event *eventcrtl.Event) error {
 }
 
 func TestAccumulateEvent(t *testing.T) {
+	t.Parallel()
 	// Arrange:
-	testCases := []struct {
+	currentTime := time.Now().UnixMilli()
+
+	type testStruct struct {
 		name     string
 		event    models.Event
 		expected *eventcrtl.Event
-	}{
-		{
-			name: "Test1",
-			event: models.Event{
-				SenderID: 1,
-				ID:       1,
-				Time:     123456789,
-				Name:     "TestEvent",
-			},
-			expected: &eventcrtl.Event{
-				SenderId: 1,
-				EventId:  1,
-				Time:     123456789,
-				Name:     "TestEvent",
-			},
-		},
-		{
-			name:     "Test2",
-			event:    models.Event{},
-			expected: &eventcrtl.Event{},
-		},
 	}
 
+	var testTable []testStruct
+	testTable = append(testTable, testStruct{
+		name:     "Test2",
+		event:    models.Event{},
+		expected: &eventcrtl.Event{},
+	})
+	for i := 1; i < 100; i++ {
+		testTable = append(testTable,
+			testStruct{
+				name: fmt.Sprintf("Test %d", i),
+				event: models.Event{
+					SenderID: int64(i),
+					ID:       int64(i),
+					Time:     currentTime,
+					Name:     fmt.Sprintf("User %d", i),
+				},
+				expected: &eventcrtl.Event{
+					SenderId: int64(i),
+					EventId:  int64(i),
+					Time:     currentTime,
+					Name:     fmt.Sprintf("User %d", i),
+				},
+			},
+		)
+	}
+	var wg sync.WaitGroup
+
 	// Act:
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
+	for _, testCase := range testTable {
+		wg.Add(1)
+		go func(testCase testStruct) {
+			defer wg.Done()
 			actual := service.AccumulateEvent(testCase.event)
 			// Assert:
 			assert.Equal(t, testCase.expected, actual)
-		})
+		}(testCase)
 	}
+	wg.Wait()
 }

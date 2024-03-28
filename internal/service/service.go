@@ -93,17 +93,15 @@ func (s *Server) MakeEvent(
 	ctx context.Context,
 	req *eventctrl.MakeEventRequest,
 ) (*eventctrl.EventIdAvail, error) {
-	s.RLock()
+	s.Lock()
+	defer s.Unlock()
+
 	event := &models.Event{
 		SenderID: req.SenderId,
 		ID:       int64(len(s.sessions[req.SenderId]) + 1),
 		Time:     req.Time,
 		Name:     req.Name,
 	}
-	s.RUnlock()
-
-	s.Lock()
-	defer s.Unlock()
 
 	if _, isExist := s.sessions[req.SenderId]; !isExist {
 		s.sessions[req.SenderId] = make(map[int64]*list.Element)

@@ -91,9 +91,7 @@ func TestMakeEvent(t *testing.T) {
 				Time:     currentTime,
 				Name:     "test",
 			},
-			expected: models.Event{
-				ID: 12345,
-			},
+			expected: models.Event{ID: 12345},
 		},
 		testStruct{
 			name: "Test 2",
@@ -102,9 +100,7 @@ func TestMakeEvent(t *testing.T) {
 				Time:     currentTime,
 				Name:     "test",
 			},
-			expected: models.Event{
-				ID: 12345,
-			},
+			expected: models.Event{ID: 12345},
 		},
 	)
 
@@ -119,7 +115,7 @@ func TestMakeEvent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assert.Equal(t, int64(12345), response.EventId)
+			assert.Equal(t, testCase.expected.ID, response.EventId)
 		})
 	}
 }
@@ -190,6 +186,57 @@ func TestGetEvent(t *testing.T) {
 			assert.Equal(t, testCase.expected.ID, response.EventId)
 			assert.Equal(t, testCase.expected.Time, response.Time)
 			assert.Equal(t, testCase.expected.Name, response.Name)
+		})
+	}
+}
+
+func TestDeleteEvent(t *testing.T) {
+	mockConn := NewMockClientConn()
+	client := eventctrl.NewEventsClient(mockConn)
+
+	mockConn.MockMethod(
+		eventctrl.Events_DeleteEvent_FullMethodName,
+		func(ctx context.Context, args, reply any, opts ...grpc.CallOption) error {
+			req := args.(*eventctrl.DeleteEventRequest)
+			resp := reply.(*eventctrl.EventIdAvail)
+			resp.EventId = req.EventId
+			return nil
+		},
+	)
+
+	ctx := context.Background()
+
+	var testTable []testStruct
+	testTable = append(testTable,
+		testStruct{
+			name: "Test 1",
+			actual: models.Event{
+				SenderID: 1,
+				ID:       1,
+			},
+			expected: models.Event{ID: 1},
+		},
+		testStruct{
+			name: "Test 2",
+			actual: models.Event{
+				SenderID: 2,
+				ID:       2,
+			},
+			expected: models.Event{ID: 2},
+		},
+	)
+
+	for _, testCase := range testTable {
+		t.Run(testCase.name, func(t *testing.T) {
+			request := &eventctrl.DeleteEventRequest{
+				SenderId: testCase.actual.SenderID,
+				EventId:  testCase.actual.ID,
+			}
+			response, err := client.DeleteEvent(ctx, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.EqualValues(t, testCase.expected.ID, response.EventId)
 		})
 	}
 }

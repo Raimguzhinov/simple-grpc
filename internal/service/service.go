@@ -21,8 +21,8 @@ type Server struct {
 	listUpdated chan bool
 }
 
-func RunEventsService() *Server {
-	pubChan := make(chan *models.Event, 1)
+func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
+	pubChan := make(chan *models.Event, 10000)
 	publish(pubChan)
 
 	srv := Server{
@@ -30,6 +30,9 @@ func RunEventsService() *Server {
 		eventsList:  list.New(),
 		brokerChan:  pubChan,
 		listUpdated: make(chan bool, 1),
+	}
+	for _, event := range events {
+		_, _ = srv.MakeEvent(context.Background(), event)
 	}
 	go srv.bypassTimer()
 
@@ -53,7 +56,7 @@ func (s *Server) bypassTimer() {
 		t2 := time.UnixMilli(event.Time).UTC()
 		timeDuration := t2.Sub(t1)
 		if timeDuration <= 0 {
-			s.passedEvents(t1)
+			_ = s.PassedEvents(t1)
 			continue
 		}
 		timer := time.NewTimer(timeDuration)
@@ -71,8 +74,8 @@ func (s *Server) bypassTimer() {
 	}
 }
 
-func (s *Server) passedEvents(currentTime time.Time) {
-	for e := s.eventsList.Front(); e != nil; e = e.Next() {
+func (s *Server) PassedEvents(currentTime time.Time) int {
+	for e := s.eventsList.Front(); e != nil; {
 		event := e.Value.(*models.Event)
 		eventTime := time.UnixMilli(event.Time).UTC()
 		timeDuration := eventTime.Sub(currentTime)
@@ -80,13 +83,16 @@ func (s *Server) passedEvents(currentTime time.Time) {
 		if timeDuration <= 0 {
 			s.brokerChan <- event
 			s.Lock()
+			next := e.Next()
 			delete(s.sessions[event.SenderID], event.ID)
 			s.eventsList.Remove(e)
+			e = next
 			s.Unlock()
 			continue
 		}
-		return
+		break
 	}
+	return s.eventsList.Len()
 }
 
 func (s *Server) MakeEvent(

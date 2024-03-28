@@ -648,7 +648,7 @@ func TestAccumulateEvent(t *testing.T) {
 
 	var testTable []testStruct
 	testTable = append(testTable, testStruct{
-		name:     "Test2",
+		name:     "Test 0",
 		event:    models.Event{},
 		expected: &eventcrtl.Event{},
 	})
@@ -679,6 +679,66 @@ func TestAccumulateEvent(t *testing.T) {
 		go func(testCase testStruct) {
 			defer wg.Done()
 			actual := service.AccumulateEvent(testCase.event)
+			// Assert:
+			assert.Equal(t, testCase.expected, actual)
+		}(testCase)
+	}
+	wg.Wait()
+}
+
+func TestPassedEvents(t *testing.T) {
+	t.Parallel()
+	// Arrange:
+	currentTime := time.Now().UTC()
+
+	type testStruct struct {
+		name     string
+		argtime  time.Time
+		req      []*eventcrtl.MakeEventRequest
+		expected int
+	}
+
+	var testTable []testStruct
+	var requests []*eventcrtl.MakeEventRequest
+
+	for i := 1; i < 10; i++ {
+		requests = append(requests,
+			&eventcrtl.MakeEventRequest{
+				SenderId: int64(i),
+				Time:     currentTime.AddDate(0, i, 0).UnixMilli(),
+				Name:     fmt.Sprintf("User %d", i),
+			},
+		)
+	}
+	testTable = append(testTable,
+		testStruct{
+			name:     "Test1",
+			argtime:  currentTime,
+			req:      requests,
+			expected: 9,
+		},
+		testStruct{
+			name:     "Test2",
+			argtime:  currentTime.AddDate(0, 5, 0),
+			req:      requests,
+			expected: 4,
+		},
+		testStruct{
+			name:     "Test3",
+			argtime:  currentTime.AddDate(5, 0, 0),
+			req:      requests,
+			expected: 0,
+		},
+	)
+	var wg sync.WaitGroup
+
+	// Act:
+	for _, testCase := range testTable {
+		wg.Add(1)
+		go func(testCase testStruct) {
+			defer wg.Done()
+			s := service.RunEventsService(testCase.req...)
+			actual := s.PassedEvents(testCase.argtime)
 			// Assert:
 			assert.Equal(t, testCase.expected, actual)
 		}(testCase)

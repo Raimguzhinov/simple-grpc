@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
@@ -15,7 +17,7 @@ type Server struct {
 	eventctrl.UnimplementedEventsServer
 	sync.RWMutex
 
-	sessions    map[int64]map[int64]*list.Element
+	sessions    map[int64]map[uuid.UUID]*list.Element
 	eventsList  *list.List
 	brokerChan  chan *models.Event
 	listUpdated chan bool
@@ -26,7 +28,7 @@ func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
 	publish(pubChan)
 
 	srv := Server{
-		sessions:    make(map[int64]map[int64]*list.Element),
+		sessions:    make(map[int64]map[uuid.UUID]*list.Element),
 		eventsList:  list.New(),
 		brokerChan:  pubChan,
 		listUpdated: make(chan bool, 1),
@@ -104,13 +106,13 @@ func (s *Server) MakeEvent(
 
 	event := &models.Event{
 		SenderID: req.SenderId,
-		ID:       int64(len(s.sessions[req.SenderId]) + 1),
+		ID:       uuid.New(),
 		Time:     req.Time,
 		Name:     req.Name,
 	}
 
 	if _, isExist := s.sessions[req.SenderId]; !isExist {
-		s.sessions[req.SenderId] = make(map[int64]*list.Element)
+		s.sessions[req.SenderId] = make(map[uuid.UUID]*list.Element)
 	}
 
 	var eventPtr *list.Element
@@ -132,8 +134,12 @@ func (s *Server) MakeEvent(
 	}
 	s.sessions[req.SenderId][event.ID] = eventPtr
 
+	binUID, err := event.ID.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
 	return &eventctrl.EventIdAvail{
-		EventId: event.ID,
+		EventId: binUID,
 	}, nil
 }
 
@@ -145,12 +151,20 @@ func (s *Server) GetEvent(
 	defer s.RUnlock()
 
 	if eventsByClient, isCreated := s.sessions[req.SenderId]; isCreated {
-		if eventPtr, isCreated := eventsByClient[req.EventId]; isCreated {
+		eventID, err := uuid.ParseBytes(req.EventId)
+		if err != nil {
+			return nil, err
+		}
+		if eventPtr, isCreated := eventsByClient[eventID]; isCreated {
 			event := eventPtr.Value.(*models.Event)
 
+			binUID, err := event.ID.MarshalBinary()
+			if err != nil {
+				return nil, err
+			}
 			return &eventctrl.Event{
 				SenderId: event.SenderID,
-				EventId:  event.ID,
+				EventId:  binUID,
 				Time:     event.Time,
 				Name:     event.Name,
 			}, nil
@@ -167,8 +181,12 @@ func (s *Server) DeleteEvent(
 	defer s.Unlock()
 
 	if eventsByClient, isExist := s.sessions[req.SenderId]; isExist {
-		if eventPtr, isCreated := eventsByClient[req.EventId]; isCreated {
-			delete(s.sessions[req.SenderId], req.EventId)
+		eventID, err := uuid.ParseBytes(req.EventId)
+		if err != nil {
+			return nil, err
+		}
+		if eventPtr, isCreated := eventsByClient[eventID]; isCreated {
+			delete(s.sessions[req.SenderId], eventID)
 
 			frontItem := s.eventsList.Front().Value
 			s.eventsList.Remove(eventPtr)
@@ -176,8 +194,17 @@ func (s *Server) DeleteEvent(
 			if eventPtr.Value == frontItem {
 				s.listUpdated <- true
 			}
+
+			eventID, err := uuid.ParseBytes(req.EventId)
+			if err != nil {
+				return nil, err
+			}
+			binUID, err := eventID.MarshalBinary()
+			if err != nil {
+				return nil, err
+			}
 			return &eventctrl.EventIdAvail{
-				EventId: req.EventId,
+				EventId: binUID,
 			}, nil
 		}
 	}
@@ -207,7 +234,7 @@ func (s *Server) GetEvents(
 		}
 
 		sort.Slice(eventStream, func(i, j int) bool {
-			return eventStream[i].ID < eventStream[j].ID
+			return eventStream[i].ID.String() < eventStream[j].ID.String()
 		})
 
 		for _, event := range eventStream {
@@ -224,9 +251,13 @@ func (s *Server) GetEvents(
 }
 
 func AccumulateEvent(event models.Event) *eventctrl.Event {
+	binUID, err := event.ID.MarshalBinary()
+	if err != nil {
+		return nil
+	}
 	return &eventctrl.Event{
 		SenderId: event.SenderID,
-		EventId:  event.ID,
+		EventId:  binUID,
 		Time:     event.Time,
 		Name:     event.Name,
 	}

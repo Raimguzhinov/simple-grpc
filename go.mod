@@ -4,6 +4,7 @@ go 1.21.6
 
 require (
 	github.com/erikgeiser/promptkit v0.9.0
+	github.com/google/uuid v1.6.0
 	github.com/rabbitmq/amqp091-go v1.9.0
 	github.com/stretchr/testify v1.8.4
 	google.golang.org/grpc v1.62.1

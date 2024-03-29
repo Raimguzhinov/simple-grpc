@@ -13,21 +13,39 @@ import (
 	"github.com/erikgeiser/promptkit/confirmation"
 	"github.com/erikgeiser/promptkit/selection"
 	"github.com/erikgeiser/promptkit/textinput"
+	"github.com/google/uuid"
 
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
+type ClientManager interface {
+	EventMaker(senderID int64, dateCer string, timeCer string, eventName string)
+	EventGetter(senderID int64, eventID []byte)
+	EventDeleter(senderID int64, eventID []byte)
+	EventsGetter(senderID int64, dateFrom string, timeFrom string, dateTo string, timeTo string)
+}
+
+type User struct {
+	eventctrl.EventsClient
+}
+
+func NewUser(conn *eventctrl.EventsClient) *User {
+	return &User{
+		EventsClient: *conn,
+	}
+}
+
 func RunEventsClient(client eventctrl.EventsClient, senderID int64) {
-	var (
-		eventID   int64
-		eventName string
-		dateCer   string
-		dateFrom  string
-		dateTo    string
-		timeCer   string
-		timeFrom  string
-		timeTo    string
-	)
+	var eventID []byte
+	var eventName,
+		dateCer,
+		dateFrom,
+		dateTo,
+		timeCer,
+		timeFrom,
+		timeTo string
+
+	u := NewUser(&client)
 
 	routingKey := strconv.Itoa(int(senderID))
 	queueName := strconv.Itoa(int(senderID))
@@ -51,13 +69,13 @@ func RunEventsClient(client eventctrl.EventsClient, senderID int64) {
 
 		switch choice {
 		case "MakeEvent":
-			eventMaker(client, senderID, dateCer, timeCer, eventName)
+			u.EventMaker(senderID, dateCer, timeCer, eventName)
 		case "GetEvent":
-			eventGetter(client, senderID, eventID)
+			u.EventGetter(senderID, eventID)
 		case "DeleteEvent":
-			eventDeleter(client, senderID, eventID)
+			u.EventDeleter(senderID, eventID)
 		case "GetEvents":
-			eventsGetter(client, senderID, dateFrom, timeFrom, dateTo, timeTo)
+			u.EventsGetter(senderID, dateFrom, timeFrom, dateTo, timeTo)
 		case "exit":
 			input := confirmation.New("Are you confirming the exit?", confirmation.Yes)
 			ready, err := input.RunPrompt()
@@ -74,8 +92,7 @@ func RunEventsClient(client eventctrl.EventsClient, senderID int64) {
 	}
 }
 
-func eventMaker(
-	client eventctrl.EventsClient,
+func (u *User) EventMaker(
 	senderID int64,
 	dateCer string,
 	timeCer string,
@@ -102,7 +119,7 @@ func eventMaker(
 	if err != nil {
 		fmt.Println(err)
 	} else {
-		res, err := client.MakeEvent(context.Background(), &eventctrl.MakeEventRequest{
+		res, err := u.MakeEvent(context.Background(), &eventctrl.MakeEventRequest{
 			SenderId: senderID,
 			Time:     dateTime.UnixMilli(),
 			Name:     eventName,
@@ -110,11 +127,15 @@ func eventMaker(
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Println("Created {", res, "}")
+		eventID, err := uuid.FromBytes(res.EventId)
+		if err != nil {
+			return
+		}
+		fmt.Println("Created {", eventID, "}")
 	}
 }
 
-func eventGetter(client eventctrl.EventsClient, senderID int64, eventID int64) {
+func (u *User) EventGetter(senderID int64, eventID []byte) {
 	input := textinput.New("Enter <event_id>:")
 	input.Placeholder = "Arg cannot be empty"
 	arg, err := input.RunPrompt()
@@ -125,7 +146,7 @@ func eventGetter(client eventctrl.EventsClient, senderID int64, eventID int64) {
 	if _, err := fmt.Sscan(arg, &eventID); err != nil {
 		fmt.Println(err)
 	} else {
-		res, err := client.GetEvent(context.Background(), &eventctrl.GetEventRequest{
+		res, err := u.GetEvent(context.Background(), &eventctrl.GetEventRequest{
 			SenderId: senderID,
 			EventId:  eventID,
 		})
@@ -133,13 +154,17 @@ func eventGetter(client eventctrl.EventsClient, senderID int64, eventID int64) {
 			parts := strings.Split(err.Error(), "desc = ")
 			fmt.Println(parts[1])
 		} else {
+			eventID, err := uuid.FromBytes(res.EventId)
+			if err != nil {
+				return
+			}
 			t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
-			fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n", res.SenderId, res.EventId, t, res.Name)
+			fmt.Printf("Event {\n  senderId: %d\n  eventId: %s\n  time: %s\n  name: '%s'\n}\n", res.SenderId, eventID, t, res.Name)
 		}
 	}
 }
 
-func eventDeleter(client eventctrl.EventsClient, senderID int64, eventID int64) {
+func (u *User) EventDeleter(senderID int64, eventID []byte) {
 	input := textinput.New("Enter <event_id>:")
 	input.Placeholder = "Arg cannot be empty"
 	arg, err := input.RunPrompt()
@@ -150,7 +175,7 @@ func eventDeleter(client eventctrl.EventsClient, senderID int64, eventID int64) 
 	if _, err := fmt.Sscan(arg, &eventID); err != nil {
 		fmt.Println(err)
 	} else {
-		res, err := client.DeleteEvent(context.Background(), &eventctrl.DeleteEventRequest{
+		res, err := u.DeleteEvent(context.Background(), &eventctrl.DeleteEventRequest{
 			SenderId: senderID,
 			EventId:  eventID,
 		})
@@ -158,13 +183,16 @@ func eventDeleter(client eventctrl.EventsClient, senderID int64, eventID int64) 
 			parts := strings.Split(err.Error(), "desc = ")
 			fmt.Println(parts[1])
 		} else {
-			fmt.Println("Deleted {", res, "}")
+			eventID, err := uuid.FromBytes(res.EventId)
+			if err != nil {
+				return
+			}
+			fmt.Println("Deleted {", eventID, "}")
 		}
 	}
 }
 
-func eventsGetter(
-	client eventctrl.EventsClient,
+func (u *User) EventsGetter(
 	senderID int64,
 	dateFrom string,
 	timeFrom string,
@@ -195,7 +223,7 @@ func eventsGetter(
 		if err1 != nil || err2 != nil {
 			fmt.Println(err1, err2)
 		} else {
-			stream, err := client.GetEvents(context.Background(), &eventctrl.GetEventsRequest{
+			stream, err := u.GetEvents(context.Background(), &eventctrl.GetEventsRequest{
 				SenderId: senderID,
 				FromTime: dateTimeFrom.UnixMilli(),
 				ToTime:   dateTimeTo.UnixMilli(),
@@ -211,8 +239,12 @@ func eventsGetter(
 						}
 						break
 					}
+					eventID, err := uuid.FromBytes(res.EventId)
+					if err != nil {
+						return
+					}
 					t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
-					fmt.Printf("Event {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n", res.SenderId, res.EventId, t, res.Name)
+					fmt.Printf("Event {\n  senderId: %d\n  eventId: %s\n  time: %s\n  name: '%s'\n}\n", res.SenderId, eventID, t, res.Name)
 				}
 			}
 		}

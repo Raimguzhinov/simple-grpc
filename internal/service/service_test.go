@@ -3,10 +3,12 @@ package service_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 
@@ -14,12 +16,6 @@ import (
 	"github.com/Raimguzhinov/simple-grpc/internal/service"
 	eventcrtl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
-
-type testStruct struct {
-	name     string
-	actual   models.Event
-	expected models.Event
-}
 
 func TestRunEventsService(t *testing.T) {
 	// Arrange:
@@ -56,6 +52,11 @@ func TestMakeEvent(t *testing.T) {
 	s := service.RunEventsService()
 	oneMonthLater := time.Now().AddDate(0, 1, 0).UnixMilli()
 
+	type testStruct struct {
+		name     string
+		actual   models.Event
+		expected bool
+	}
 	var testTable []testStruct
 	for i := 0; i < 100; i++ {
 		testTable = append(testTable, testStruct{
@@ -65,15 +66,15 @@ func TestMakeEvent(t *testing.T) {
 				Time:     oneMonthLater,
 				Name:     fmt.Sprintf("User %d", i),
 			},
-			expected: models.Event{ID: 1},
+			expected: true,
 		})
 	}
 
 	var wg sync.WaitGroup
 	type testResult struct {
-		resp     *eventcrtl.EventIdAvail
+		actual   bool
 		err      error
-		expected models.Event
+		expected bool
 	}
 	resultCh := make(chan testResult, 1)
 
@@ -97,7 +98,8 @@ func TestMakeEvent(t *testing.T) {
 				testCase.actual,
 				resp.GetEventId(),
 			)
-			resultCh <- testResult{resp, err, testCase.expected}
+			actual := s.IsEventExist(testCase.actual.SenderID, resp.GetEventId())
+			resultCh <- testResult{actual, err, testCase.expected}
 		}(testCase)
 	}
 
@@ -109,7 +111,7 @@ func TestMakeEvent(t *testing.T) {
 	// Assert:
 	for res := range resultCh {
 		assert.Nil(t, res.err)
-		assert.Equal(t, res.expected.ID, res.resp.GetEventId())
+		assert.Equal(t, res.expected, res.actual)
 	}
 }
 
@@ -119,6 +121,11 @@ func TestMakeEventMultiSession(t *testing.T) {
 	s := service.RunEventsService()
 	oneMonthLater := time.Now().AddDate(0, 1, 0).UnixMilli()
 
+	type testStruct struct {
+		name     string
+		actual   models.Event
+		expected bool
+	}
 	var testTable []testStruct
 	expectedEvents := 2
 
@@ -145,12 +152,12 @@ func TestMakeEventMultiSession(t *testing.T) {
 
 	var wg sync.WaitGroup
 	type testResult struct {
-		resp     *eventcrtl.EventIdAvail
+		actual   bool
 		err      error
-		expected models.Event
+		expected bool
 	}
 	resultCh := make(chan testResult, 1)
-	eventsExists := make(map[int64]bool)
+	recurringEvents := make(map[int64]bool)
 	var mu sync.Mutex
 
 	// Act:
@@ -180,10 +187,11 @@ func TestMakeEventMultiSession(t *testing.T) {
 			)
 
 			senderID := testCase.actual.SenderID
-			if _, ok := eventsExists[senderID]; ok {
-				resultCh <- testResult{resp, err, models.Event{ID: int64(expectedEvents)}}
+			if _, ok := recurringEvents[senderID]; ok {
+				actual := s.IsEventExist(senderID, resp.GetEventId())
+				resultCh <- testResult{actual, err, true}
 			} else {
-				eventsExists[senderID] = true
+				recurringEvents[senderID] = true
 			}
 		}(testCase)
 	}
@@ -196,11 +204,16 @@ func TestMakeEventMultiSession(t *testing.T) {
 	// Assert:
 	for res := range resultCh {
 		assert.Nil(t, res.err)
-		assert.Equal(t, res.expected.ID, res.resp.GetEventId())
+		assert.Equal(t, res.expected, res.actual)
 	}
 }
 
-func MockEventMaker(t *testing.T, s *service.Server, givenTime int64) error {
+func MockEventMaker(
+	t *testing.T,
+	s *service.Server,
+	givenTime int64,
+) (*map[int64]map[string][]byte, error) {
+	eventsIdMap := make(map[int64]map[string][]byte)
 	oneMonthLater := time.UnixMilli(givenTime).AddDate(0, 1, 0).UnixMilli()
 	eventsData := []struct {
 		SenderId int64
@@ -221,108 +234,108 @@ func MockEventMaker(t *testing.T, s *service.Server, givenTime int64) error {
 		})
 		t.Log(resp)
 		if err != nil {
-			return err
+			return nil, err
 		}
+		if _, ok := eventsIdMap[eventData.SenderId]; !ok {
+			eventsIdMap[eventData.SenderId] = make(map[string][]byte)
+		}
+		eventsIdMap[eventData.SenderId][eventData.Name] = resp.EventId
 	}
-	return nil
+	return &eventsIdMap, nil
 }
 
-func SetupTest(t *testing.T, currentTime time.Time) *service.Server {
+func SetupTest(
+	t *testing.T,
+	currentTime time.Time,
+) (*service.Server, *map[int64]map[string][]byte) {
 	s := service.RunEventsService()
+	var idMap *map[int64]map[string][]byte
 	t.Run("Mocking events", func(t *testing.T) {
-		err := MockEventMaker(t, s, currentTime.UnixMilli())
+		var err error
+		idMap, err = MockEventMaker(t, s, currentTime.UnixMilli())
 		if err != nil {
 			t.Error(err)
 		}
 	})
 	t.Log("Events created")
-	return s
+	return s, idMap
 }
 
 func TestGetEvent(t *testing.T) {
 	t.Parallel()
 	// Arrange:
 	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
-	s := SetupTest(t, oneMonthLaterT)
+	s, idMapPtr := SetupTest(t, oneMonthLaterT)
+	idMap := *idMapPtr
 	oneMonthLater := oneMonthLaterT.UnixMilli()
 	loc, _ := time.LoadLocation("America/New_York")
 
+	type testStruct struct {
+		name     string
+		actual   *eventcrtl.GetEventRequest
+		expected *eventcrtl.Event
+	}
 	var testTable []testStruct
 	testTable = append(testTable,
 		testStruct{
 			name: "Test 1",
-			actual: models.Event{
-				SenderID: 0,
-				ID:       0,
+			actual: &eventcrtl.GetEventRequest{
+				SenderId: 0,
+				EventId:  []byte("0000-0000-0000"),
 			},
-			expected: models.Event{
-				SenderID: 0,
-				ID:       0,
-				Time:     0,
-				Name:     "",
-			},
+			expected: nil,
 		},
 		testStruct{
 			name: "Test 2",
-			actual: models.Event{
-				SenderID: 1,
-				ID:       1,
+			actual: &eventcrtl.GetEventRequest{
+				SenderId: 1,
+				EventId:  idMap[1]["User1"],
 			},
-			expected: models.Event{
-				SenderID: 1,
-				ID:       1,
+			expected: &eventcrtl.Event{
+				SenderId: 1,
+				EventId:  idMap[1]["User1"],
 				Time:     oneMonthLater,
 				Name:     "User1",
 			},
 		},
 		testStruct{
 			name: "Test 3",
-			actual: models.Event{
-				SenderID: 2,
-				ID:       1,
+			actual: &eventcrtl.GetEventRequest{
+				SenderId: 2,
+				EventId:  idMap[2]["User2"],
 			},
-			expected: models.Event{
-				SenderID: 2,
-				ID:       1,
+			expected: &eventcrtl.Event{
+				SenderId: 2,
+				EventId:  idMap[2]["User2"],
 				Time:     oneMonthLater,
 				Name:     "User2",
 			},
 		},
 		testStruct{
 			name: "Test 4",
-			actual: models.Event{
-				SenderID: 1,
-				ID:       2,
+			actual: &eventcrtl.GetEventRequest{
+				SenderId: 3,
+				EventId:  idMap[1]["User1"],
 			},
-			expected: models.Event{
-				SenderID: 0,
-				ID:       0,
-				Time:     0,
-				Name:     "",
-			},
+			expected: nil,
 		},
 		testStruct{
-			name: "Test 5",
-			actual: models.Event{
-				SenderID: 999,
-				ID:       1,
+			name: "Test 4",
+			actual: &eventcrtl.GetEventRequest{
+				SenderId: 999,
+				EventId:  idMap[2]["User2"],
 			},
-			expected: models.Event{
-				SenderID: 0,
-				ID:       0,
-				Time:     0,
-				Name:     "",
-			},
+			expected: nil,
 		},
 		testStruct{
 			name: "Test 6",
-			actual: models.Event{
-				SenderID: 3,
-				ID:       1,
+			actual: &eventcrtl.GetEventRequest{
+				SenderId: 3,
+				EventId:  idMap[3]["User3"],
 			},
-			expected: models.Event{
-				SenderID: 3,
-				ID:       1,
+			expected: &eventcrtl.Event{
+				SenderId: 3,
+				EventId:  idMap[3]["User3"],
 				Time:     time.UnixMilli(oneMonthLater).In(loc).UnixMilli(),
 				Name:     "User3",
 			},
@@ -333,7 +346,7 @@ func TestGetEvent(t *testing.T) {
 	type testResult struct {
 		resp     *eventcrtl.Event
 		err      error
-		expected models.Event
+		expected *eventcrtl.Event
 	}
 	resultCh := make(chan testResult, 1)
 
@@ -343,10 +356,7 @@ func TestGetEvent(t *testing.T) {
 		go func(testCase testStruct) {
 			defer wg.Done()
 
-			req := &eventcrtl.GetEventRequest{
-				SenderId: testCase.actual.SenderID,
-				EventId:  testCase.actual.ID,
-			}
+			req := testCase.actual
 			resp, err := s.GetEvent(context.Background(), req)
 			t.Logf(
 				"\nCalling TestGetEvent(\n  %v\n),\nresult: %v\n\n",
@@ -367,9 +377,10 @@ func TestGetEvent(t *testing.T) {
 	for res := range resultCh {
 		if res.err != nil {
 			assert.Equal(t, service.ErrEventNotFound, res.err)
+			continue
 		}
-		assert.Equal(t, res.expected.SenderID, res.resp.GetSenderId())
-		assert.Equal(t, res.expected.ID, res.resp.GetEventId())
+		assert.Equal(t, res.expected.SenderId, res.resp.GetSenderId())
+		assert.Equal(t, res.expected.EventId, res.resp.GetEventId())
 		assert.Equal(t, res.expected.Time, res.resp.GetTime())
 		assert.Equal(t, res.expected.Name, res.resp.GetName())
 	}
@@ -379,59 +390,55 @@ func TestDeleteEvent(t *testing.T) {
 	t.Parallel()
 	// Arrange:
 	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
-	s := SetupTest(t, oneMonthLaterT)
+	s, idMapPtr := SetupTest(t, oneMonthLaterT)
+	idMap := *idMapPtr
 
+	type testStruct struct {
+		name     string
+		actual   *eventcrtl.DeleteEventRequest
+		expected *eventcrtl.EventIdAvail
+	}
 	var testTable []testStruct
 	testTable = append(testTable,
 		testStruct{
 			name: "Test 1",
-			actual: models.Event{
-				SenderID: 0,
-				ID:       0,
+			actual: &eventcrtl.DeleteEventRequest{
+				SenderId: 0,
+				EventId:  []byte("0000-0000-0000"),
 			},
-			expected: models.Event{
-				ID: 0,
-			},
+			expected: nil,
 		},
 		testStruct{
 			name: "Test 2",
-			actual: models.Event{
-				SenderID: 1,
-				ID:       1,
+			actual: &eventcrtl.DeleteEventRequest{
+				SenderId: 1,
+				EventId:  idMap[1]["User1"],
 			},
-			expected: models.Event{
-				ID: 1,
-			},
+			expected: &eventcrtl.EventIdAvail{EventId: idMap[1]["User1"]},
 		},
 		testStruct{
 			name: "Test 3",
-			actual: models.Event{
-				SenderID: 2,
-				ID:       1,
+			actual: &eventcrtl.DeleteEventRequest{
+				SenderId: 2,
+				EventId:  idMap[2]["User2"],
 			},
-			expected: models.Event{
-				ID: 1,
-			},
+			expected: &eventcrtl.EventIdAvail{EventId: idMap[2]["User2"]},
 		},
 		testStruct{
 			name: "Test 4",
-			actual: models.Event{
-				SenderID: 1,
-				ID:       2,
+			actual: &eventcrtl.DeleteEventRequest{
+				SenderId: 3,
+				EventId:  []byte("999-9999-9999"),
 			},
-			expected: models.Event{
-				ID: 0,
-			},
+			expected: nil,
 		},
 		testStruct{
 			name: "Test 5",
-			actual: models.Event{
-				SenderID: 999,
-				ID:       1,
+			actual: &eventcrtl.DeleteEventRequest{
+				SenderId: 999,
+				EventId:  idMap[1]["User1"],
 			},
-			expected: models.Event{
-				ID: 0,
-			},
+			expected: nil,
 		},
 	)
 
@@ -439,7 +446,7 @@ func TestDeleteEvent(t *testing.T) {
 	type testResult struct {
 		resp     *eventcrtl.EventIdAvail
 		err      error
-		expected models.Event
+		expected *eventcrtl.EventIdAvail
 	}
 	resultCh := make(chan testResult, 1)
 
@@ -449,10 +456,7 @@ func TestDeleteEvent(t *testing.T) {
 		go func(testCase testStruct) {
 			defer wg.Done()
 
-			req := &eventcrtl.DeleteEventRequest{
-				SenderId: testCase.actual.SenderID,
-				EventId:  testCase.actual.ID,
-			}
+			req := testCase.actual
 			resp, err := s.DeleteEvent(context.Background(), req)
 			t.Logf(
 				"\nCalling TestDeleteEvent(\n  %v\n),\nresult: %v\n\n",
@@ -472,8 +476,9 @@ func TestDeleteEvent(t *testing.T) {
 	for res := range resultCh {
 		if res.err != nil {
 			assert.Equal(t, service.ErrEventNotFound, res.err)
+			continue
 		}
-		assert.Equal(t, res.expected.ID, res.resp.GetEventId())
+		assert.Equal(t, res.expected.EventId, res.resp.GetEventId())
 	}
 }
 
@@ -481,7 +486,8 @@ func TestGetEvents(t *testing.T) {
 	t.Parallel()
 	// Arrange:
 	oneMonthLaterT := time.Now().AddDate(0, 1, 0)
-	s := SetupTest(t, oneMonthLaterT)
+	s, idMapPtr := SetupTest(t, oneMonthLaterT)
+	idMap := *idMapPtr
 	oneMonthLater := oneMonthLaterT.UnixMilli()
 	oneYearAgo := time.Now().AddDate(-1, 0, 0).UnixMilli()
 	oneYearLater := time.Now().AddDate(1, 0, 0).UnixMilli()
@@ -490,85 +496,73 @@ func TestGetEvents(t *testing.T) {
 		name      string
 		actual    models.Event
 		timerange [2]int64
-		expected  []models.Event
+		expected  []*eventcrtl.Event
 	}
 
 	var testTable []testStruct
 	testTable = append(testTable,
 		testStruct{
-			name: "Test 1",
-			actual: models.Event{
-				SenderID: 0,
-			},
+			name:      "Test 1",
+			actual:    models.Event{SenderID: 0},
 			timerange: [2]int64{oneYearAgo, oneYearLater},
-			expected:  []models.Event{},
+			expected:  []*eventcrtl.Event{},
 		},
 		testStruct{
-			name: "Test 2",
-			actual: models.Event{
-				SenderID: 1,
-			},
+			name:      "Test 2",
+			actual:    models.Event{SenderID: 1},
 			timerange: [2]int64{oneYearAgo, oneYearLater},
-			expected: []models.Event{
+			expected: []*eventcrtl.Event{
 				{
-					SenderID: 1,
-					ID:       1,
+					SenderId: 1,
+					EventId:  idMap[1]["User1"],
 					Time:     oneMonthLater,
 					Name:     "User1",
 				},
 			},
 		},
 		testStruct{
-			name: "Test 3",
-			actual: models.Event{
-				SenderID: 2,
-			},
+			name:      "Test 3",
+			actual:    models.Event{SenderID: 2},
 			timerange: [2]int64{oneYearAgo, oneYearLater},
-			expected: []models.Event{
+			expected: []*eventcrtl.Event{
 				{
-					SenderID: 2,
-					ID:       1,
+					SenderId: 2,
+					EventId:  idMap[2]["User2"],
 					Time:     oneMonthLater,
 					Name:     "User2",
 				},
 				{
-					SenderID: 2,
-					ID:       2,
+					SenderId: 2,
+					EventId:  idMap[2]["User2Again"],
 					Time:     oneMonthLaterT.AddDate(0, 1, 0).UnixMilli(),
 					Name:     "User2Again",
 				},
 			},
 		},
 		testStruct{
-			name: "Test 4",
-			actual: models.Event{
-				SenderID: 3,
-			},
+			name:      "Test 4",
+			actual:    models.Event{SenderID: 3},
 			timerange: [2]int64{oneYearAgo, oneYearLater},
-			expected: []models.Event{
+			expected: []*eventcrtl.Event{
 				{
-					SenderID: 3,
-					ID:       1,
+					SenderId: 3,
+					EventId:  idMap[3]["User3"],
 					Time:     oneMonthLater,
 					Name:     "User3",
 				},
 			},
 		},
 		testStruct{
-			name: "Test 5",
-			actual: models.Event{
-				SenderID: 3,
-			},
+			name:      "Test 5",
+			actual:    models.Event{SenderID: 3},
 			timerange: [2]int64{oneYearAgo, oneYearAgo},
-			expected:  []models.Event{},
+			expected:  []*eventcrtl.Event{},
 		},
 		testStruct{
-			name: "Test 6",
-			actual: models.Event{
-				SenderID: 3,
-			},
+			name:      "Test 6",
+			actual:    models.Event{SenderID: 3},
 			timerange: [2]int64{oneYearLater, oneYearLater},
-			expected:  []models.Event{},
+			expected:  []*eventcrtl.Event{},
 		},
 	)
 
@@ -604,9 +598,17 @@ func TestGetEvents(t *testing.T) {
 			}
 			t.Log(mockStream.SentEvents)
 
+			sort.Slice(mockStream.SentEvents, func(i, j int) bool {
+				return string(
+					mockStream.SentEvents[i].GetEventId(),
+				) < string(
+					mockStream.SentEvents[j].GetEventId(),
+				)
+			})
+
 			for i, resp := range mockStream.SentEvents {
 				t.Logf("\nCalling TestGetEvents(\n  %v\n),\nresult: %v\n\n", testCase.actual, resp)
-				resultCh <- testResult{resp, err, service.AccumulateEvent(testCase.expected[i])}
+				resultCh <- testResult{resp, err, testCase.expected[i]}
 			}
 		}(testCase)
 	}
@@ -647,24 +649,27 @@ func TestAccumulateEvent(t *testing.T) {
 	}
 
 	var testTable []testStruct
+	binNilUID, _ := uuid.Nil.MarshalBinary()
 	testTable = append(testTable, testStruct{
 		name:     "Test 0",
 		event:    models.Event{},
-		expected: &eventcrtl.Event{},
+		expected: &eventcrtl.Event{EventId: binNilUID},
 	})
 	for i := 1; i < 100; i++ {
+		eId := uuid.New()
+		binUID, _ := eId.MarshalBinary()
 		testTable = append(testTable,
 			testStruct{
 				name: fmt.Sprintf("Test %d", i),
 				event: models.Event{
 					SenderID: int64(i),
-					ID:       int64(i),
+					ID:       eId,
 					Time:     currentTime,
 					Name:     fmt.Sprintf("User %d", i),
 				},
 				expected: &eventcrtl.Event{
 					SenderId: int64(i),
-					EventId:  int64(i),
+					EventId:  binUID,
 					Time:     currentTime,
 					Name:     fmt.Sprintf("User %d", i),
 				},

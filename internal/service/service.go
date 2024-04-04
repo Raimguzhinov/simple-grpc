@@ -3,7 +3,6 @@ package service
 import (
 	"container/list"
 	"context"
-	"sort"
 	"sync"
 	"time"
 
@@ -150,12 +149,12 @@ func (s *Server) GetEvent(
 	s.RLock()
 	defer s.RUnlock()
 
-	if eventsByClient, isCreated := s.sessions[req.SenderId]; isCreated {
-		eventID, err := uuid.ParseBytes(req.EventId)
+	if _, isCreated := s.sessions[req.SenderId]; isCreated {
+		eventID, err := uuid.FromBytes(req.EventId)
 		if err != nil {
-			return nil, err
+			return nil, ErrEventNotFound
 		}
-		if eventPtr, isCreated := eventsByClient[eventID]; isCreated {
+		if eventPtr, isCreated := s.sessions[req.SenderId][eventID]; isCreated {
 			event := eventPtr.Value.(*models.Event)
 
 			binUID, err := event.ID.MarshalBinary()
@@ -180,12 +179,12 @@ func (s *Server) DeleteEvent(
 	s.Lock()
 	defer s.Unlock()
 
-	if eventsByClient, isExist := s.sessions[req.SenderId]; isExist {
-		eventID, err := uuid.ParseBytes(req.EventId)
+	if _, isExist := s.sessions[req.SenderId]; isExist {
+		eventID, err := uuid.FromBytes(req.EventId)
 		if err != nil {
-			return nil, err
+			return nil, ErrEventNotFound
 		}
-		if eventPtr, isCreated := eventsByClient[eventID]; isCreated {
+		if eventPtr, isCreated := s.sessions[req.SenderId][eventID]; isCreated {
 			delete(s.sessions[req.SenderId], eventID)
 
 			frontItem := s.eventsList.Front().Value
@@ -195,10 +194,6 @@ func (s *Server) DeleteEvent(
 				s.listUpdated <- true
 			}
 
-			eventID, err := uuid.ParseBytes(req.EventId)
-			if err != nil {
-				return nil, err
-			}
 			binUID, err := eventID.MarshalBinary()
 			if err != nil {
 				return nil, err
@@ -217,44 +212,41 @@ func (s *Server) GetEvents(
 ) error {
 	s.Lock()
 	defer s.Unlock()
-
 	foundEvent := false
-	if s.sessions == nil {
-		return ErrEventNotFound
-	}
 
-	if eventsByClient, isExist := s.sessions[req.SenderId]; isExist {
-		var eventStream []*models.Event
-		for _, eventPtr := range eventsByClient {
+	if _, isExist := s.sessions[req.SenderId]; isExist {
+		for _, eventPtr := range s.sessions[req.SenderId] {
 			event := eventPtr.Value.(*models.Event)
 			if req.FromTime <= event.Time && event.Time <= req.ToTime {
-				eventStream = append(eventStream, event)
 				foundEvent = true
+				if err := stream.Send(AccumulateEvent(*event)); err != nil {
+					return ErrEventNotFound
+				}
 			}
 		}
-
-		sort.Slice(eventStream, func(i, j int) bool {
-			return eventStream[i].ID.String() < eventStream[j].ID.String()
-		})
-
-		for _, event := range eventStream {
-			if err := stream.Send(AccumulateEvent(*event)); err != nil {
-				return ErrEventNotFound
-			}
+		if !foundEvent {
+			return ErrEventNotFound
 		}
-	}
-
-	if !foundEvent {
-		return nil
+	} else {
+		return ErrEventNotFound
 	}
 	return nil
 }
 
-func AccumulateEvent(event models.Event) *eventctrl.Event {
-	binUID, err := event.ID.MarshalBinary()
-	if err != nil {
-		return nil
+func (s *Server) IsEventExist(senderID int64, binUID []byte) bool {
+	s.RLock()
+	defer s.RUnlock()
+	if eventsByClient, isCreated := s.sessions[senderID]; isCreated {
+		eventID, _ := uuid.FromBytes(binUID)
+		if _, isExist := eventsByClient[eventID]; isCreated {
+			return isExist
+		}
 	}
+	return false
+}
+
+func AccumulateEvent(event models.Event) *eventctrl.Event {
+	binUID, _ := event.ID.MarshalBinary()
 	return &eventctrl.Event{
 		SenderId: event.SenderID,
 		EventId:  binUID,

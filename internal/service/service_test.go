@@ -122,9 +122,8 @@ func TestMakeEventMultiSession(t *testing.T) {
 	oneMonthLater := time.Now().AddDate(0, 1, 0).UnixMilli()
 
 	type testStruct struct {
-		name     string
-		actual   models.Event
-		expected bool
+		name   string
+		actual models.Event
 	}
 	var testTable []testStruct
 	expectedEvents := 2
@@ -595,15 +594,7 @@ func TestGetEvents(t *testing.T) {
 			expectedErr: service.ErrEventNotFound,
 		},
 	)
-
 	var wg sync.WaitGroup
-	type testResult struct {
-		resp     *eventcrtl.Event
-		err      error
-		expected *eventcrtl.Event
-	}
-	resultCh := make(chan testResult, 1)
-	_ = resultCh
 
 	// Act:
 	for _, testCase := range testTable {

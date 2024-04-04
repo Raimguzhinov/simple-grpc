@@ -3,13 +3,13 @@ package service_test
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 	"testing"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
@@ -41,7 +41,7 @@ func TestRunEventsService(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Assert:
-			assert.Equal(t, testCase.expected, testCase.actual)
+			require.Equal(t, testCase.expected, testCase.actual)
 		})
 	}
 }
@@ -110,8 +110,8 @@ func TestMakeEvent(t *testing.T) {
 
 	// Assert:
 	for res := range resultCh {
-		assert.Nil(t, res.err)
-		assert.Equal(t, res.expected, res.actual)
+		require.Nil(t, res.err)
+		require.Equal(t, res.expected, res.actual)
 	}
 }
 
@@ -203,8 +203,8 @@ func TestMakeEventMultiSession(t *testing.T) {
 
 	// Assert:
 	for res := range resultCh {
-		assert.Nil(t, res.err)
-		assert.Equal(t, res.expected, res.actual)
+		require.Nil(t, res.err)
+		require.Equal(t, res.expected, res.actual)
 	}
 }
 
@@ -271,9 +271,10 @@ func TestGetEvent(t *testing.T) {
 	loc, _ := time.LoadLocation("America/New_York")
 
 	type testStruct struct {
-		name     string
-		actual   *eventcrtl.GetEventRequest
-		expected *eventcrtl.Event
+		name        string
+		actual      *eventcrtl.GetEventRequest
+		expected    *eventcrtl.Event
+		expectedErr error
 	}
 	var testTable []testStruct
 	testTable = append(testTable,
@@ -283,7 +284,8 @@ func TestGetEvent(t *testing.T) {
 				SenderId: 0,
 				EventId:  []byte("0000-0000-0000"),
 			},
-			expected: nil,
+			expected:    nil,
+			expectedErr: service.ErrEventNotFound,
 		},
 		testStruct{
 			name: "Test 2",
@@ -297,6 +299,7 @@ func TestGetEvent(t *testing.T) {
 				Time:     oneMonthLater,
 				Name:     "User1",
 			},
+			expectedErr: nil,
 		},
 		testStruct{
 			name: "Test 3",
@@ -310,6 +313,7 @@ func TestGetEvent(t *testing.T) {
 				Time:     oneMonthLater,
 				Name:     "User2",
 			},
+			expectedErr: nil,
 		},
 		testStruct{
 			name: "Test 4",
@@ -317,7 +321,8 @@ func TestGetEvent(t *testing.T) {
 				SenderId: 3,
 				EventId:  idMap[1]["User1"],
 			},
-			expected: nil,
+			expected:    nil,
+			expectedErr: service.ErrEventNotFound,
 		},
 		testStruct{
 			name: "Test 4",
@@ -325,7 +330,8 @@ func TestGetEvent(t *testing.T) {
 				SenderId: 999,
 				EventId:  idMap[2]["User2"],
 			},
-			expected: nil,
+			expected:    nil,
+			expectedErr: service.ErrEventNotFound,
 		},
 		testStruct{
 			name: "Test 6",
@@ -339,14 +345,14 @@ func TestGetEvent(t *testing.T) {
 				Time:     time.UnixMilli(oneMonthLater).In(loc).UnixMilli(),
 				Name:     "User3",
 			},
+			expectedErr: nil,
 		},
 	)
 
 	var wg sync.WaitGroup
 	type testResult struct {
-		resp     *eventcrtl.Event
-		err      error
-		expected *eventcrtl.Event
+		resp, expected   *eventcrtl.Event
+		err, expectedErr error
 	}
 	resultCh := make(chan testResult, 1)
 
@@ -364,7 +370,7 @@ func TestGetEvent(t *testing.T) {
 				resp.GetEventId(),
 			)
 
-			resultCh <- testResult{resp, err, testCase.expected}
+			resultCh <- testResult{resp, testCase.expected, err, testCase.expectedErr}
 		}(testCase)
 	}
 
@@ -375,14 +381,20 @@ func TestGetEvent(t *testing.T) {
 
 	// Assert:
 	for res := range resultCh {
-		if res.err != nil {
-			assert.Equal(t, service.ErrEventNotFound, res.err)
-			continue
+		if res.expectedErr == nil {
+			require.NoError(t, res.err)
+		} else {
+			require.EqualError(t, res.err, res.expectedErr.Error())
 		}
-		assert.Equal(t, res.expected.SenderId, res.resp.GetSenderId())
-		assert.Equal(t, res.expected.EventId, res.resp.GetEventId())
-		assert.Equal(t, res.expected.Time, res.resp.GetTime())
-		assert.Equal(t, res.expected.Name, res.resp.GetName())
+
+		if res.expected == nil {
+			require.Nil(t, res.resp)
+		} else {
+			require.Equal(t, res.expected.SenderId, res.resp.GetSenderId())
+			require.Equal(t, res.expected.EventId, res.resp.GetEventId())
+			require.Equal(t, res.expected.Time, res.resp.GetTime())
+			require.Equal(t, res.expected.Name, res.resp.GetName())
+		}
 	}
 }
 
@@ -394,9 +406,10 @@ func TestDeleteEvent(t *testing.T) {
 	idMap := *idMapPtr
 
 	type testStruct struct {
-		name     string
-		actual   *eventcrtl.DeleteEventRequest
-		expected *eventcrtl.EventIdAvail
+		name        string
+		actual      *eventcrtl.DeleteEventRequest
+		expected    *eventcrtl.EventIdAvail
+		expectedErr error
 	}
 	var testTable []testStruct
 	testTable = append(testTable,
@@ -406,7 +419,8 @@ func TestDeleteEvent(t *testing.T) {
 				SenderId: 0,
 				EventId:  []byte("0000-0000-0000"),
 			},
-			expected: nil,
+			expected:    nil,
+			expectedErr: service.ErrEventNotFound,
 		},
 		testStruct{
 			name: "Test 2",
@@ -414,7 +428,8 @@ func TestDeleteEvent(t *testing.T) {
 				SenderId: 1,
 				EventId:  idMap[1]["User1"],
 			},
-			expected: &eventcrtl.EventIdAvail{EventId: idMap[1]["User1"]},
+			expected:    &eventcrtl.EventIdAvail{EventId: idMap[1]["User1"]},
+			expectedErr: nil,
 		},
 		testStruct{
 			name: "Test 3",
@@ -422,7 +437,8 @@ func TestDeleteEvent(t *testing.T) {
 				SenderId: 2,
 				EventId:  idMap[2]["User2"],
 			},
-			expected: &eventcrtl.EventIdAvail{EventId: idMap[2]["User2"]},
+			expected:    &eventcrtl.EventIdAvail{EventId: idMap[2]["User2"]},
+			expectedErr: nil,
 		},
 		testStruct{
 			name: "Test 4",
@@ -430,7 +446,8 @@ func TestDeleteEvent(t *testing.T) {
 				SenderId: 3,
 				EventId:  []byte("999-9999-9999"),
 			},
-			expected: nil,
+			expected:    nil,
+			expectedErr: service.ErrEventNotFound,
 		},
 		testStruct{
 			name: "Test 5",
@@ -438,15 +455,15 @@ func TestDeleteEvent(t *testing.T) {
 				SenderId: 999,
 				EventId:  idMap[1]["User1"],
 			},
-			expected: nil,
+			expected:    nil,
+			expectedErr: service.ErrEventNotFound,
 		},
 	)
 
 	var wg sync.WaitGroup
 	type testResult struct {
-		resp     *eventcrtl.EventIdAvail
-		err      error
-		expected *eventcrtl.EventIdAvail
+		resp, expected   *eventcrtl.EventIdAvail
+		err, expectedErr error
 	}
 	resultCh := make(chan testResult, 1)
 
@@ -463,7 +480,7 @@ func TestDeleteEvent(t *testing.T) {
 				testCase.actual,
 				resp.GetEventId(),
 			)
-			resultCh <- testResult{resp, err, testCase.expected}
+			resultCh <- testResult{resp, testCase.expected, err, testCase.expectedErr}
 		}(testCase)
 	}
 
@@ -474,11 +491,17 @@ func TestDeleteEvent(t *testing.T) {
 
 	// Assert:
 	for res := range resultCh {
-		if res.err != nil {
-			assert.Equal(t, service.ErrEventNotFound, res.err)
-			continue
+		if res.expectedErr == nil {
+			require.NoError(t, res.err)
+		} else {
+			require.EqualError(t, res.err, res.expectedErr.Error())
 		}
-		assert.Equal(t, res.expected.EventId, res.resp.GetEventId())
+
+		if res.expected == nil {
+			require.Nil(t, res.resp)
+		} else {
+			require.Equal(t, res.expected.EventId, res.resp.GetEventId())
+		}
 	}
 }
 
@@ -493,19 +516,21 @@ func TestGetEvents(t *testing.T) {
 	oneYearLater := time.Now().AddDate(1, 0, 0).UnixMilli()
 
 	type testStruct struct {
-		name      string
-		actual    models.Event
-		timerange [2]int64
-		expected  []*eventcrtl.Event
+		name        string
+		actual      models.Event
+		timerange   [2]int64
+		expected    []*eventcrtl.Event
+		expectedErr error
 	}
 
 	var testTable []testStruct
 	testTable = append(testTable,
 		testStruct{
-			name:      "Test 1",
-			actual:    models.Event{SenderID: 0},
-			timerange: [2]int64{oneYearAgo, oneYearLater},
-			expected:  []*eventcrtl.Event{},
+			name:        "Test 1",
+			actual:      models.Event{SenderID: 0},
+			timerange:   [2]int64{oneYearAgo, oneYearLater},
+			expected:    []*eventcrtl.Event{},
+			expectedErr: service.ErrEventNotFound,
 		},
 		testStruct{
 			name:      "Test 2",
@@ -519,6 +544,7 @@ func TestGetEvents(t *testing.T) {
 					Name:     "User1",
 				},
 			},
+			expectedErr: nil,
 		},
 		testStruct{
 			name:      "Test 3",
@@ -538,6 +564,7 @@ func TestGetEvents(t *testing.T) {
 					Name:     "User2Again",
 				},
 			},
+			expectedErr: nil,
 		},
 		testStruct{
 			name:      "Test 4",
@@ -551,18 +578,21 @@ func TestGetEvents(t *testing.T) {
 					Name:     "User3",
 				},
 			},
+			expectedErr: nil,
 		},
 		testStruct{
-			name:      "Test 5",
-			actual:    models.Event{SenderID: 3},
-			timerange: [2]int64{oneYearAgo, oneYearAgo},
-			expected:  []*eventcrtl.Event{},
+			name:        "Test 5",
+			actual:      models.Event{SenderID: 3},
+			timerange:   [2]int64{oneYearAgo, oneYearAgo},
+			expected:    []*eventcrtl.Event{},
+			expectedErr: service.ErrEventNotFound,
 		},
 		testStruct{
-			name:      "Test 6",
-			actual:    models.Event{SenderID: 3},
-			timerange: [2]int64{oneYearLater, oneYearLater},
-			expected:  []*eventcrtl.Event{},
+			name:        "Test 6",
+			actual:      models.Event{SenderID: 3},
+			timerange:   [2]int64{oneYearLater, oneYearLater},
+			expected:    []*eventcrtl.Event{},
+			expectedErr: service.ErrEventNotFound,
 		},
 	)
 
@@ -591,40 +621,21 @@ func TestGetEvents(t *testing.T) {
 				SentEvents: make([]*eventcrtl.Event, 0),
 			}
 			err := s.GetEvents(req, mockStream)
-			if err != nil {
-				t.Logf("\nCalling TestGetEvents(\n  %v\n),\nresult: %v\n\n", testCase.actual, err)
-				assert.Equal(t, err, service.ErrEventNotFound)
-				return
-			}
-			t.Log(mockStream.SentEvents)
 
-			sort.Slice(mockStream.SentEvents, func(i, j int) bool {
-				return string(
-					mockStream.SentEvents[i].GetEventId(),
-				) < string(
-					mockStream.SentEvents[j].GetEventId(),
-				)
-			})
-
-			for i, resp := range mockStream.SentEvents {
-				t.Logf("\nCalling TestGetEvents(\n  %v\n),\nresult: %v\n\n", testCase.actual, resp)
-				resultCh <- testResult{resp, err, testCase.expected[i]}
+			// Assert:
+			if testCase.expectedErr == nil {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, testCase.expectedErr.Error())
 			}
+			require.ElementsMatch(
+				t,
+				testCase.expected,
+				mockStream.SentEvents,
+			)
 		}(testCase)
 	}
-
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// Assert:
-	for res := range resultCh {
-		assert.Equal(t, res.expected.GetSenderId(), res.resp.GetSenderId())
-		assert.Equal(t, res.expected.GetEventId(), res.resp.GetEventId())
-		assert.Equal(t, res.expected.GetName(), res.resp.GetName())
-		assert.Equal(t, res.expected.GetTime(), res.resp.GetTime())
-	}
+	wg.Wait()
 }
 
 type mockEventStream struct {
@@ -685,7 +696,7 @@ func TestAccumulateEvent(t *testing.T) {
 			defer wg.Done()
 			actual := service.AccumulateEvent(testCase.event)
 			// Assert:
-			assert.Equal(t, testCase.expected, actual)
+			require.Equal(t, testCase.expected, actual)
 		}(testCase)
 	}
 	wg.Wait()
@@ -745,7 +756,7 @@ func TestPassedEvents(t *testing.T) {
 			s := service.RunEventsService(testCase.req...)
 			actual := s.PassedEvents(testCase.argtime)
 			// Assert:
-			assert.Equal(t, testCase.expected, actual)
+			require.Equal(t, testCase.expected, actual)
 		}(testCase)
 	}
 	wg.Wait()

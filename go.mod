@@ -1,6 +1,6 @@
 module github.com/Raimguzhinov/simple-grpc
 
-go 1.21.6
+go 1.22.2
 
 require (
 	github.com/erikgeiser/promptkit v0.9.0

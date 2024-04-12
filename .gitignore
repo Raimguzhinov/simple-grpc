@@ -57,3 +57,4 @@ dkms.conf
 ehthumbs.db
 Thumbs.db
 debug/
+.idea/

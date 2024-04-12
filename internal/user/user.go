@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 	"github.com/erikgeiser/promptkit/confirmation"
 	"github.com/erikgeiser/promptkit/selection"
 	"github.com/erikgeiser/promptkit/textinput"
 	"github.com/google/uuid"
-
-	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type ClientManager interface {
@@ -81,21 +81,35 @@ func (u *User) EventMaker(senderID int64, promt string, w io.Writer) {
 	dateTime := locDateTime.UTC()
 	if err != nil {
 		fmt.Fprintln(w, ErrBadDateTime)
-	} else {
-		res, err := u.MakeEvent(context.Background(), &eventctrl.MakeEventRequest{
-			SenderId: senderID,
-			Time:     dateTime.UnixMilli(),
-			Name:     eventName,
-		})
-		if err != nil {
-			fmt.Fprintln(w, ErrUnexpected)
-		}
-		eventID, err := uuid.FromBytes(res.EventId)
-		if err != nil {
-			return
-		}
-		fmt.Fprintf(w, "Created {%s}\n", eventID)
+		return
 	}
+	m := map[string]interface{}{
+		"STATUS":            "CONFIRMED",
+		"X-PROTEI-SENDERID": senderID,
+		"DESCRIPTION":       eventName,
+		"CREATED":           time.Now().UnixMilli(),
+		"LAST-MODIFIED":     time.Now().UnixMilli(),
+		"DTSTART":           dateTime.UnixMilli(),
+		"DTEND":             dateTime.Add(time.Hour * 24).UnixMilli(),
+	}
+	details, err := structpb.NewStruct(m)
+	if err != nil {
+		panic(err)
+	}
+	res, err := u.MakeEvent(context.Background(), &eventctrl.MakeEventRequest{
+		SenderId: senderID,
+		Time:     dateTime.UnixMilli(),
+		Name:     eventName,
+		Details:  details,
+	})
+	if err != nil {
+		fmt.Fprintln(w, ErrUnexpected)
+	}
+	eventID, err := uuid.FromBytes(res.EventId)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "Created {%s}\n", eventID)
 }
 
 func (u *User) EventGetter(senderID int64, promt string, w io.Writer) {
@@ -167,32 +181,32 @@ func (u *User) EventsGetter(senderID int64, promt string, w io.Writer) {
 
 	if err1 != nil || err2 != nil {
 		fmt.Fprintln(w, ErrBadDateTime)
-	} else {
-		stream, err := u.GetEvents(context.Background(), &eventctrl.GetEventsRequest{
-			SenderId: senderID,
-			FromTime: dateTimeFrom.UnixMilli(),
-			ToTime:   dateTimeTo.UnixMilli(),
-		})
-		if err != nil {
-			fmt.Fprintln(w, ErrUnexpected)
-		} else {
-			for i := 0; ; i++ {
-				res, err := stream.Recv()
-				if err == io.EOF {
-					if i == 0 {
-						fmt.Fprintln(w, ErrNotFound)
-					}
-					break
-				}
-				eventID, err := uuid.FromBytes(res.EventId)
-				if err != nil {
-					fmt.Fprintln(w, ErrNotFound)
-					return
-				}
-				t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
-				fmt.Fprintf(w, "Event {\n  senderId: %d\n  eventId: %s\n  time: %s\n  name: '%s'\n}\n", res.SenderId, eventID, t, res.Name)
+		return
+	}
+	stream, err := u.GetEvents(context.Background(), &eventctrl.GetEventsRequest{
+		SenderId: senderID,
+		FromTime: dateTimeFrom.UnixMilli(),
+		ToTime:   dateTimeTo.UnixMilli(),
+	})
+	if err != nil {
+		fmt.Fprintln(w, ErrUnexpected)
+		return
+	}
+	for i := 0; ; i++ {
+		res, err := stream.Recv()
+		if err == io.EOF {
+			if i == 0 {
+				fmt.Fprintln(w, ErrNotFound)
 			}
+			break
 		}
+		eventID, err := uuid.FromBytes(res.EventId)
+		if err != nil {
+			fmt.Fprintln(w, ErrNotFound)
+			return
+		}
+		t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
+		fmt.Fprintf(w, "Event {\n  senderId: %d\n  eventId: %s\n  time: %s\n  name: '%s'\n}\n", res.SenderId, eventID, t, res.Name)
 	}
 }
 

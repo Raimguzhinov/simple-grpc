@@ -3,19 +3,20 @@ package service
 import (
 	"container/list"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	"github.com/google/uuid"
 )
 
 type Server struct {
 	eventctrl.UnimplementedEventsServer
 	sync.RWMutex
 
+	calendar    *Calendar
 	sessions    map[int64]map[uuid.UUID]*list.Element
 	eventsList  *list.List
 	brokerChan  chan *models.Event
@@ -27,6 +28,10 @@ func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
 	publish(pubChan)
 
 	srv := Server{
+		calendar: NewCalendarService(
+			"http://45.153.69.189/remote.php/dav",
+			"admin", "admin",
+		),
 		sessions:    make(map[int64]map[uuid.UUID]*list.Element),
 		eventsList:  list.New(),
 		brokerChan:  pubChan,
@@ -36,6 +41,25 @@ func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
 		_, _ = srv.MakeEvent(context.Background(), event)
 	}
 	go srv.bypassTimer()
+
+	calendars, err := srv.calendar.GetCalendars(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	var calEvents []*models.Event
+	for _, calendar := range calendars {
+		calEvents, err = srv.calendar.LoadEvents(context.Background(), calendar)
+		if err != nil {
+			panic(err)
+		}
+	}
+	for _, e := range calEvents {
+		if _, isExist := srv.sessions[e.SenderID]; !isExist {
+			srv.sessions[e.SenderID] = make(map[uuid.UUID]*list.Element)
+		}
+		eventPtr := srv.eventsList.PushBack(e)
+		srv.sessions[e.SenderID][e.ID] = eventPtr
+	}
 
 	return &srv
 }
@@ -109,6 +133,7 @@ func (s *Server) MakeEvent(
 		Time:     req.Time,
 		Name:     req.Name,
 	}
+	fmt.Println(req.Details)
 
 	if _, isExist := s.sessions[req.SenderId]; !isExist {
 		s.sessions[req.SenderId] = make(map[uuid.UUID]*list.Element)

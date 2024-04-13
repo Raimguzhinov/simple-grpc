@@ -32,7 +32,13 @@ func main() {
 	s := grpc.NewServer()
 	reflection.Register(s)
 
+	cal := service.NewCalendarService(
+		cfg.CaldavServer.Url,
+		cfg.CaldavServer.Login,
+		cfg.CaldavServer.Password,
+	)
 	eventsrv := service.RunEventsService()
+	eventsrv.RegisterCalDAVServer(cal)
 	eventctrl.RegisterEventsServer(s, eventsrv)
 	log.Printf("Listening on %s:%d", host, port)
 	if err := s.Serve(lis); err != nil {

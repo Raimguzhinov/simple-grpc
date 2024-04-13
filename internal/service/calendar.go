@@ -90,28 +90,33 @@ func (c *Calendar) LoadEvents(ctx context.Context, calendar caldav.Calendar) ([]
 	return events, nil
 }
 
-func (c *Calendar) PutCalendarObject(ctx context.Context, cal *ical.Calendar) error {
+func (c *Calendar) PutCalendarObject(ctx context.Context, cal *ical.Calendar, calendars ...caldav.Calendar) error {
 	client, err := c.getClient()
-	calendars, err := c.GetCalendars(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = client.PutCalendarObject(ctx, calendars[0].Path+uuid.NewString()+".ics", cal)
-	if err != nil {
-		return err
+	for _, calendar := range calendars {
+		eventID := getPropertyValue(cal.Children[0].Props.Get(ical.PropUID))
+		obj, err := client.PutCalendarObject(ctx, calendar.Path+eventID+".ics", cal)
+		if err != nil {
+			return err
+		}
+		log.Println("Putted:", obj)
 	}
 	return nil
 }
 
-func (c *Calendar) DeleteCalendarObject(ctx context.Context, eventID uuid.UUID) error {
+func (c *Calendar) DeleteCalendarObject(ctx context.Context, eventID uuid.UUID, calendars ...caldav.Calendar) error {
 	client, err := c.getClient()
-	calendars, err := c.GetCalendars(ctx)
 	if err != nil {
 		return err
 	}
-	err = client.RemoveAll(ctx, calendars[0].Path+eventID.String()+".ics")
-	if err != nil {
-		return err
+	for _, calendar := range calendars {
+		err = client.RemoveAll(ctx, calendar.Path+eventID.String()+".ics")
+		if err != nil {
+			return err
+		}
+		log.Println("Deleted:", calendar.Path+eventID.String()+".ics")
 	}
 	return nil
 }

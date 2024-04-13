@@ -3,9 +3,11 @@ package service
 import (
 	"container/list"
 	"context"
+	"github.com/Raimguzhinov/go-webdav/caldav"
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 	"github.com/google/uuid"
+	"log"
 	"sync"
 	"time"
 )
@@ -14,27 +16,19 @@ type Server struct {
 	eventctrl.UnimplementedEventsServer
 	sync.RWMutex
 
-	calendar    *Calendar
-	sessions    map[int64]map[uuid.UUID]*list.Element
-	eventsList  *list.List
-	brokerChan  chan *models.Event
-	listUpdated chan bool
+	calDAVServer *Calendar
+	calendars    []caldav.Calendar
+	sessions     map[int64]map[uuid.UUID]*list.Element
+	eventsList   *list.List
+	brokerChan   chan *models.Event
+	listUpdated  chan bool
 }
 
 func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
-	//cfg, err := configs.New()
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
 	pubChan := make(chan *models.Event, 10000)
 	publish(pubChan)
 
 	srv := Server{
-		//calendar: NewCalendarService(
-		//	cfg.CaldavServer.Url,
-		//	cfg.CaldavServer.Login,
-		//	cfg.CaldavServer.Password,
-		//),
 		sessions:    make(map[int64]map[uuid.UUID]*list.Element),
 		eventsList:  list.New(),
 		brokerChan:  pubChan,
@@ -45,50 +39,60 @@ func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
 	}
 	go srv.bypassTimer()
 
-	//go func() {
-	//	calendars, err := srv.calendar.GetCalendars(context.Background())
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//	var calEvents []*models.Event
-	//	for _, calendar := range calendars {
-	//		calEvents, err = srv.calendar.LoadEvents(context.Background(), calendar)
-	//		if err != nil {
-	//			log.Fatal(err)
-	//		}
-	//	}
-	//
-	//	for _, req := range calEvents {
-	//		if _, isExist := srv.sessions[req.SenderID]; !isExist {
-	//			srv.sessions[req.SenderID] = make(map[uuid.UUID]*list.Element)
-	//		}
-	//
-	//		var eventPtr *list.Element
-	//		if srv.eventsList.Len() == 0 {
-	//			eventPtr = srv.eventsList.PushBack(req)
-	//			srv.listUpdated <- true
-	//		} else {
-	//			for e := srv.eventsList.Back(); e != nil; e = e.Prev() {
-	//				item := e.Value.(*models.Event)
-	//				if req.Time >= item.Time {
-	//					eventPtr = srv.eventsList.InsertAfter(req, e)
-	//					break
-	//				} else if e == srv.eventsList.Front() && item.Time > req.Time {
-	//					eventPtr = srv.eventsList.InsertBefore(req, e)
-	//					srv.listUpdated <- true
-	//					break
-	//				}
-	//			}
-	//		}
-	//		srv.sessions[req.SenderID][req.ID] = eventPtr
-	//	}
-	//}()
-
 	return &srv
+}
+
+func (s *Server) RegisterCalDAVServer(calDAVServer *Calendar) {
+	calendars, err := calDAVServer.GetCalendars(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	s.calDAVServer = calDAVServer
+	s.calendars = calendars
+	go s.syncWithCalendars()
 }
 
 func (s *Server) IsInitialized() bool {
 	return s.eventsList != nil && s.sessions != nil && s.brokerChan != nil
+}
+
+func (s *Server) syncWithCalendars() {
+	s.Lock()
+	defer s.Unlock()
+
+	var calEvents []*models.Event
+	var err error
+	for _, calendar := range s.calendars {
+		calEvents, err = s.calDAVServer.LoadEvents(context.Background(), calendar)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	for _, req := range calEvents {
+		if _, isExist := s.sessions[req.SenderID]; !isExist {
+			s.sessions[req.SenderID] = make(map[uuid.UUID]*list.Element)
+		}
+
+		var eventPtr *list.Element
+		if s.eventsList.Len() == 0 {
+			eventPtr = s.eventsList.PushBack(req)
+			s.listUpdated <- true
+		} else {
+			for e := s.eventsList.Back(); e != nil; e = e.Prev() {
+				item := e.Value.(*models.Event)
+				if req.Time >= item.Time {
+					eventPtr = s.eventsList.InsertAfter(req, e)
+					break
+				} else if e == s.eventsList.Front() && item.Time > req.Time {
+					eventPtr = s.eventsList.InsertBefore(req, e)
+					s.listUpdated <- true
+					break
+				}
+			}
+		}
+		s.sessions[req.SenderID][req.ID] = eventPtr
+	}
 }
 
 func (s *Server) bypassTimer() {
@@ -157,44 +161,14 @@ func (s *Server) MakeEvent(
 		Name:     req.Name,
 	}
 
-	//go func() {
-	//	alarm := ical.NewComponent(ical.CompAlarm)
-	//	alarm.Props.SetText(ical.PropAction, "DISPLAY")
-	//	trigger := ical.NewProp(ical.PropTrigger)
-	//	trigger.SetDuration(-58 * time.Minute)
-	//	alarm.Props.Set(trigger)
-	//
-	//	calEvent := ical.NewEvent()
-	//	calEvent.Name = ical.CompEvent
-	//	for k, v := range req.Details.GetFields() {
-	//		prop := ical.NewProp(k)
-	//		if prop.ValueType() == ical.ValueDateTime {
-	//			calEvent.Props.SetDateTime(k, time.UnixMilli(int64(v.GetNumberValue())))
-	//		}
-	//		if prop.ValueType() == ical.ValueInt || k == "X-PROTEI-SENDERID" {
-	//			calEvent.Props.SetText(k, strconv.Itoa(int(v.GetNumberValue())))
-	//		}
-	//		if prop.ValueType() == ical.ValueText {
-	//			calEvent.Props.SetText(k, v.GetStringValue())
-	//		}
-	//	}
-	//	calEvent.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
-	//	calEvent.Props.SetText(ical.PropSequence, "1")
-	//	calEvent.Props.SetText(ical.PropUID, event.ID.String())
-	//	calEvent.Props.SetText(ical.PropSummary, event.Name)
-	//	calEvent.Props.SetText(ical.PropTransparency, "OPAQUE")
-	//	calEvent.Props.SetText(ical.PropClass, "PUBLIC")
-	//	calEvent.Children = []*ical.Component{alarm}
-	//	fmt.Println(calEvent.Props)
-	//
-	//	cal := ical.NewCalendar()
-	//	cal.Props.SetText(ical.PropVersion, "2.0")
-	//	cal.Props.SetText(ical.PropProductID, "-//Raimguzhinov//go-caldav 1.0//EN")
-	//	cal.Props.SetText(ical.PropCalendarScale, "GREGORIAN")
-	//	cal.Children = []*ical.Component{calEvent.Component}
-	//
-	//	_ = s.calendar.PutCalendarObject(ctx, cal)
-	//}()
+	if s.calDAVServer != nil && len(s.calendars) > 0 {
+		go func() {
+			err := s.calDAVServer.PutCalendarObject(context.Background(), event.ICalObjectBuilder(req), s.calendars[0])
+			if err != nil {
+				log.Println("Can't put event to calendar", err)
+			}
+		}()
+	}
 
 	if _, isExist := s.sessions[req.SenderId]; !isExist {
 		s.sessions[req.SenderId] = make(map[uuid.UUID]*list.Element)
@@ -272,7 +246,15 @@ func (s *Server) DeleteEvent(
 		}
 		if eventPtr, isCreated := s.sessions[req.SenderId][eventID]; isCreated {
 			delete(s.sessions[req.SenderId], eventID)
-			//_ = s.calendar.DeleteCalendarObject(ctx, eventID)
+
+			if s.calDAVServer != nil && len(s.calendars) > 0 {
+				go func() {
+					err = s.calDAVServer.DeleteCalendarObject(context.Background(), eventID, s.calendars[0])
+					if err != nil {
+						log.Println("Can't delete event from calendar", err)
+					}
+				}()
+			}
 
 			frontItem := s.eventsList.Front().Value
 			s.eventsList.Remove(eventPtr)

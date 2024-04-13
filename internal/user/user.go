@@ -4,19 +4,18 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/emersion/go-ical"
-	"io"
-	"os"
-	"strconv"
-	"strings"
-	"time"
-
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	"github.com/emersion/go-ical"
 	"github.com/erikgeiser/promptkit/confirmation"
 	"github.com/erikgeiser/promptkit/selection"
 	"github.com/erikgeiser/promptkit/textinput"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type ClientManager interface {

@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"net/http"
-	"strconv"
-	"time"
-
 	"github.com/Raimguzhinov/go-webdav"
 	"github.com/Raimguzhinov/go-webdav/caldav"
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	"github.com/emersion/go-ical"
 	"github.com/google/uuid"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
 )
 
 type Calendar struct {

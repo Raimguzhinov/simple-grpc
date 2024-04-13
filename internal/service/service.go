@@ -5,14 +5,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/Raimguzhinov/simple-grpc/configs"
+	"github.com/Raimguzhinov/simple-grpc/internal/models"
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 	"github.com/emersion/go-ical"
+	"github.com/google/uuid"
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/Raimguzhinov/simple-grpc/internal/models"
-	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
-	"github.com/google/uuid"
 )
 
 type Server struct {

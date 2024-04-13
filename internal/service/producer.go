@@ -2,14 +2,12 @@ package service
 
 import (
 	"context"
+	"github.com/Raimguzhinov/simple-grpc/internal/models"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"google.golang.org/protobuf/proto"
 	"log"
 	"strconv"
 	"time"
-
-	amqp "github.com/rabbitmq/amqp091-go"
-	"google.golang.org/protobuf/proto"
-
-	"github.com/Raimguzhinov/simple-grpc/internal/models"
 )
 
 func publish(pubChan chan *models.Event) {

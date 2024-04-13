@@ -3,13 +3,9 @@ package service
 import (
 	"container/list"
 	"context"
-	"fmt"
-	"github.com/Raimguzhinov/simple-grpc/configs"
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
-	"github.com/emersion/go-ical"
 	"github.com/google/uuid"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -26,19 +22,19 @@ type Server struct {
 }
 
 func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
-	cfg, err := configs.New()
-	if err != nil {
-		panic(err)
-	}
+	//cfg, err := configs.New()
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 	pubChan := make(chan *models.Event, 10000)
 	publish(pubChan)
 
 	srv := Server{
-		calendar: NewCalendarService(
-			cfg.CaldavServer.Url,
-			cfg.CaldavServer.Login,
-			cfg.CaldavServer.Password,
-		),
+		//calendar: NewCalendarService(
+		//	cfg.CaldavServer.Url,
+		//	cfg.CaldavServer.Login,
+		//	cfg.CaldavServer.Password,
+		//),
 		sessions:    make(map[int64]map[uuid.UUID]*list.Element),
 		eventsList:  list.New(),
 		brokerChan:  pubChan,
@@ -49,18 +45,44 @@ func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
 	}
 	go srv.bypassTimer()
 
-	calendars, err := srv.calendar.GetCalendars(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	var calEvents []*models.Event
-	for _, calendar := range calendars {
-		calEvents, err = srv.calendar.LoadEvents(context.Background(), calendar)
-		if err != nil {
-			panic(err)
-		}
-	}
-	_ = calEvents
+	//go func() {
+	//	calendars, err := srv.calendar.GetCalendars(context.Background())
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//	var calEvents []*models.Event
+	//	for _, calendar := range calendars {
+	//		calEvents, err = srv.calendar.LoadEvents(context.Background(), calendar)
+	//		if err != nil {
+	//			log.Fatal(err)
+	//		}
+	//	}
+	//
+	//	for _, req := range calEvents {
+	//		if _, isExist := srv.sessions[req.SenderID]; !isExist {
+	//			srv.sessions[req.SenderID] = make(map[uuid.UUID]*list.Element)
+	//		}
+	//
+	//		var eventPtr *list.Element
+	//		if srv.eventsList.Len() == 0 {
+	//			eventPtr = srv.eventsList.PushBack(req)
+	//			srv.listUpdated <- true
+	//		} else {
+	//			for e := srv.eventsList.Back(); e != nil; e = e.Prev() {
+	//				item := e.Value.(*models.Event)
+	//				if req.Time >= item.Time {
+	//					eventPtr = srv.eventsList.InsertAfter(req, e)
+	//					break
+	//				} else if e == srv.eventsList.Front() && item.Time > req.Time {
+	//					eventPtr = srv.eventsList.InsertBefore(req, e)
+	//					srv.listUpdated <- true
+	//					break
+	//				}
+	//			}
+	//		}
+	//		srv.sessions[req.SenderID][req.ID] = eventPtr
+	//	}
+	//}()
 
 	return &srv
 }
@@ -135,44 +157,44 @@ func (s *Server) MakeEvent(
 		Name:     req.Name,
 	}
 
-	go func() {
-		alarm := ical.NewComponent(ical.CompAlarm)
-		alarm.Props.SetText(ical.PropAction, "DISPLAY")
-		trigger := ical.NewProp(ical.PropTrigger)
-		trigger.SetDuration(-58 * time.Minute)
-		alarm.Props.Set(trigger)
-
-		calEvent := ical.NewEvent()
-		calEvent.Name = ical.CompEvent
-		for k, v := range req.Details.GetFields() {
-			prop := ical.NewProp(k)
-			if prop.ValueType() == ical.ValueDateTime {
-				calEvent.Props.SetDateTime(k, time.UnixMilli(int64(v.GetNumberValue())))
-			}
-			if prop.ValueType() == ical.ValueInt || k == "X-PROTEI-SENDERID" {
-				calEvent.Props.SetText(k, strconv.Itoa(int(v.GetNumberValue())))
-			}
-			if prop.ValueType() == ical.ValueText {
-				calEvent.Props.SetText(k, v.GetStringValue())
-			}
-		}
-		calEvent.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
-		calEvent.Props.SetText(ical.PropSequence, "1")
-		calEvent.Props.SetText(ical.PropUID, event.ID.String())
-		calEvent.Props.SetText(ical.PropSummary, event.Name)
-		calEvent.Props.SetText(ical.PropTransparency, "OPAQUE")
-		calEvent.Props.SetText(ical.PropClass, "PUBLIC")
-		calEvent.Children = []*ical.Component{alarm}
-		fmt.Println(calEvent.Props)
-
-		cal := ical.NewCalendar()
-		cal.Props.SetText(ical.PropVersion, "2.0")
-		cal.Props.SetText(ical.PropProductID, "-//Raimguzhinov//go-caldav 1.0//EN")
-		cal.Props.SetText(ical.PropCalendarScale, "GREGORIAN")
-		cal.Children = []*ical.Component{calEvent.Component}
-
-		_ = s.calendar.PutCalendarObject(context.Background(), cal)
-	}()
+	//go func() {
+	//	alarm := ical.NewComponent(ical.CompAlarm)
+	//	alarm.Props.SetText(ical.PropAction, "DISPLAY")
+	//	trigger := ical.NewProp(ical.PropTrigger)
+	//	trigger.SetDuration(-58 * time.Minute)
+	//	alarm.Props.Set(trigger)
+	//
+	//	calEvent := ical.NewEvent()
+	//	calEvent.Name = ical.CompEvent
+	//	for k, v := range req.Details.GetFields() {
+	//		prop := ical.NewProp(k)
+	//		if prop.ValueType() == ical.ValueDateTime {
+	//			calEvent.Props.SetDateTime(k, time.UnixMilli(int64(v.GetNumberValue())))
+	//		}
+	//		if prop.ValueType() == ical.ValueInt || k == "X-PROTEI-SENDERID" {
+	//			calEvent.Props.SetText(k, strconv.Itoa(int(v.GetNumberValue())))
+	//		}
+	//		if prop.ValueType() == ical.ValueText {
+	//			calEvent.Props.SetText(k, v.GetStringValue())
+	//		}
+	//	}
+	//	calEvent.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
+	//	calEvent.Props.SetText(ical.PropSequence, "1")
+	//	calEvent.Props.SetText(ical.PropUID, event.ID.String())
+	//	calEvent.Props.SetText(ical.PropSummary, event.Name)
+	//	calEvent.Props.SetText(ical.PropTransparency, "OPAQUE")
+	//	calEvent.Props.SetText(ical.PropClass, "PUBLIC")
+	//	calEvent.Children = []*ical.Component{alarm}
+	//	fmt.Println(calEvent.Props)
+	//
+	//	cal := ical.NewCalendar()
+	//	cal.Props.SetText(ical.PropVersion, "2.0")
+	//	cal.Props.SetText(ical.PropProductID, "-//Raimguzhinov//go-caldav 1.0//EN")
+	//	cal.Props.SetText(ical.PropCalendarScale, "GREGORIAN")
+	//	cal.Children = []*ical.Component{calEvent.Component}
+	//
+	//	_ = s.calendar.PutCalendarObject(ctx, cal)
+	//}()
 
 	if _, isExist := s.sessions[req.SenderId]; !isExist {
 		s.sessions[req.SenderId] = make(map[uuid.UUID]*list.Element)
@@ -250,6 +272,7 @@ func (s *Server) DeleteEvent(
 		}
 		if eventPtr, isCreated := s.sessions[req.SenderId][eventID]; isCreated {
 			delete(s.sessions[req.SenderId], eventID)
+			//_ = s.calendar.DeleteCalendarObject(ctx, eventID)
 
 			frontItem := s.eventsList.Front().Value
 			s.eventsList.Remove(eventPtr)

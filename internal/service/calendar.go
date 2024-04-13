@@ -96,7 +96,20 @@ func (c *Calendar) PutCalendarObject(ctx context.Context, cal *ical.Calendar) er
 	if err != nil {
 		return err
 	}
-	_, err = client.PutCalendarObject(ctx, calendars[1].Path+uuid.NewString()+".ics", cal)
+	_, err = client.PutCalendarObject(ctx, calendars[0].Path+uuid.NewString()+".ics", cal)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Calendar) DeleteCalendarObject(ctx context.Context, eventID uuid.UUID) error {
+	client, err := c.getClient()
+	calendars, err := c.GetCalendars(ctx)
+	if err != nil {
+		return err
+	}
+	err = client.RemoveAll(ctx, calendars[0].Path+eventID.String()+".ics")
 	if err != nil {
 		return err
 	}
@@ -163,7 +176,7 @@ func CalendarObjectToEventArray(calendarObjects []caldav.CalendarObject, timezon
 			}
 
 			log.Printf(
-				"\nCLASS: %s\nSTATUS: %s\nUID: %s\nSUMMARY: %s\nDESCRIPTION: %s\nURL: %s\nCREATED: %s\nDTSTART: %s\nDTEND: %s\nDTSTAMP %s\nLAST-MODIFIED: %s\nSEQUENCE: %s\nTRANSP: %s\nX-PROTEI-SENDERID: %s\n\n",
+				"\nCLASS: %s\nSTATUS: %s\nUID: %s\nSUMMARY: %s\nDESCRIPTION: %s\nURL: %s\nCREATED: %s\nDTSTART: %s\nDTEND: %s\nDTSTAMP %s\nLAST-MODIFIED: %s\nSEQUENCE: %s\nTRANSP: %s\nX-PROTEI-SENDERID: %d\n\n",
 				eventClass,
 				status,
 				eventId,

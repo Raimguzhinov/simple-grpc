@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-const configPath = "config.yml"
+const configPath = "/home/r0ot/Documents/simple-grpc/config.yml"
 
 type Config struct {
 	EventServer struct {

@@ -91,6 +91,19 @@ func (c *Calendar) LoadEvents(ctx context.Context, calendar caldav.Calendar) ([]
 	return events, nil
 }
 
+func (c *Calendar) PutCalendarObject(ctx context.Context, cal *ical.Calendar) error {
+	client, err := c.getClient()
+	calendars, err := c.GetCalendars(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = client.PutCalendarObject(ctx, calendars[1].Path+uuid.NewString()+".ics", cal)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *Calendar) queryCalendarEvents(
 	ctx context.Context,
 	client *caldav.Client,

@@ -4,6 +4,9 @@ import (
 	"container/list"
 	"context"
 	"fmt"
+	"github.com/Raimguzhinov/simple-grpc/configs"
+	"github.com/emersion/go-ical"
+	"strconv"
 	"sync"
 	"time"
 
@@ -24,13 +27,18 @@ type Server struct {
 }
 
 func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
+	cfg, err := configs.New()
+	if err != nil {
+		panic(err)
+	}
 	pubChan := make(chan *models.Event, 10000)
 	publish(pubChan)
 
 	srv := Server{
 		calendar: NewCalendarService(
-			"http://45.153.69.189/remote.php/dav",
-			"admin", "admin",
+			cfg.CaldavServer.Url,
+			cfg.CaldavServer.Login,
+			cfg.CaldavServer.Password,
 		),
 		sessions:    make(map[int64]map[uuid.UUID]*list.Element),
 		eventsList:  list.New(),
@@ -53,13 +61,7 @@ func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
 			panic(err)
 		}
 	}
-	for _, e := range calEvents {
-		if _, isExist := srv.sessions[e.SenderID]; !isExist {
-			srv.sessions[e.SenderID] = make(map[uuid.UUID]*list.Element)
-		}
-		eventPtr := srv.eventsList.PushBack(e)
-		srv.sessions[e.SenderID][e.ID] = eventPtr
-	}
+	_ = calEvents
 
 	return &srv
 }
@@ -133,7 +135,45 @@ func (s *Server) MakeEvent(
 		Time:     req.Time,
 		Name:     req.Name,
 	}
-	fmt.Println(req.Details)
+
+	go func() {
+		alarm := ical.NewComponent(ical.CompAlarm)
+		alarm.Props.SetText(ical.PropAction, "DISPLAY")
+		trigger := ical.NewProp(ical.PropTrigger)
+		trigger.SetDuration(-58 * time.Minute)
+		alarm.Props.Set(trigger)
+
+		calEvent := ical.NewEvent()
+		calEvent.Name = ical.CompEvent
+		for k, v := range req.Details.GetFields() {
+			prop := ical.NewProp(k)
+			if prop.ValueType() == ical.ValueDateTime {
+				calEvent.Props.SetDateTime(k, time.UnixMilli(int64(v.GetNumberValue())))
+			}
+			if prop.ValueType() == ical.ValueInt || k == "X-PROTEI-SENDERID" {
+				calEvent.Props.SetText(k, strconv.Itoa(int(v.GetNumberValue())))
+			}
+			if prop.ValueType() == ical.ValueText {
+				calEvent.Props.SetText(k, v.GetStringValue())
+			}
+		}
+		calEvent.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
+		calEvent.Props.SetText(ical.PropSequence, "1")
+		calEvent.Props.SetText(ical.PropUID, event.ID.String())
+		calEvent.Props.SetText(ical.PropSummary, event.Name)
+		calEvent.Props.SetText(ical.PropTransparency, "OPAQUE")
+		calEvent.Props.SetText(ical.PropClass, "PUBLIC")
+		calEvent.Children = []*ical.Component{alarm}
+		fmt.Println(calEvent.Props)
+
+		cal := ical.NewCalendar()
+		cal.Props.SetText(ical.PropVersion, "2.0")
+		cal.Props.SetText(ical.PropProductID, "-//Raimguzhinov//go-caldav 1.0//EN")
+		cal.Props.SetText(ical.PropCalendarScale, "GREGORIAN")
+		cal.Children = []*ical.Component{calEvent.Component}
+
+		_ = s.calendar.PutCalendarObject(context.Background(), cal)
+	}()
 
 	if _, isExist := s.sessions[req.SenderId]; !isExist {
 		s.sessions[req.SenderId] = make(map[uuid.UUID]*list.Element)

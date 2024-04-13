@@ -1,0 +1,9 @@
+# Events config
+server:
+  host: 127.0.0.1
+  port: 8080
+
+caldav:
+  url: http://45.153.69.189/remote.php/dav
+  login: admin
+  password: admin

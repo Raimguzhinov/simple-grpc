@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/emersion/go-ical"
 	"io"
 	"os"
 	"strconv"
@@ -84,13 +85,13 @@ func (u *User) EventMaker(senderID int64, promt string, w io.Writer) {
 		return
 	}
 	m := map[string]interface{}{
-		"STATUS":            "CONFIRMED",
-		"X-PROTEI-SENDERID": senderID,
-		"DESCRIPTION":       eventName,
-		"CREATED":           time.Now().UnixMilli(),
-		"LAST-MODIFIED":     time.Now().UnixMilli(),
-		"DTSTART":           dateTime.UnixMilli(),
-		"DTEND":             dateTime.Add(time.Hour * 24).UnixMilli(),
+		"X-PROTEI-SENDERID":    senderID,
+		ical.PropStatus:        ical.EventConfirmed,
+		ical.PropDescription:   eventName,
+		ical.PropCreated:       time.Now().UnixMilli(),
+		ical.PropLastModified:  time.Now().UnixMilli(),
+		ical.PropDateTimeStart: dateTime.UnixMilli(),
+		ical.PropDateTimeEnd:   dateTime.Add(time.Hour * 24).UnixMilli(),
 	}
 	details, err := structpb.NewStruct(m)
 	if err != nil {

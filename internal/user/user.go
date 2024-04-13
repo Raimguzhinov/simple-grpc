@@ -1,7 +1,6 @@
 package user
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
@@ -49,12 +48,11 @@ func RunEventsClient(client eventctrl.EventsClient, senderID int64) {
 	routingKey := strconv.Itoa(int(senderID))
 	queueName := strconv.Itoa(int(senderID))
 
-	f := bufio.NewWriter(os.Stdout)
-	go notifyHandler(&eventctrl.Event{}, routingKey, queueName, f)
+	go notifyHandler(&eventctrl.Event{}, routingKey, queueName)
 
 	fmt.Println("Choose procedure: MakeEvent, GetEvent, DeleteEvent, GetEvents")
 	for {
-		switch u.promtPicker(f) {
+		switch u.promtPicker() {
 		case "MakeEvent":
 			u.EventMaker(senderID, u.promtMaker(), os.Stdout)
 		case "GetEvent":
@@ -85,7 +83,6 @@ func (u *User) EventMaker(senderID int64, promt string, w io.Writer) {
 	}
 	m := map[string]interface{}{
 		"X-PROTEI-SENDERID":    senderID,
-		ical.PropStatus:        ical.EventConfirmed,
 		ical.PropDescription:   eventName,
 		ical.PropCreated:       time.Now().UnixMilli(),
 		ical.PropLastModified:  time.Now().UnixMilli(),
@@ -210,8 +207,7 @@ func (u *User) EventsGetter(senderID int64, promt string, w io.Writer) {
 	}
 }
 
-func (u *User) promtPicker(f *bufio.Writer) string {
-	f.Flush()
+func (u *User) promtPicker() string {
 	sp := selection.New(
 		"\nWhat do you pick?",
 		[]string{"MakeEvent", "GetEvent", "DeleteEvent", "GetEvents", "exit"},

@@ -2,12 +2,13 @@ package user
 
 import (
 	"fmt"
+	"time"
+
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 	"github.com/google/uuid"
 	"github.com/martinlindhe/notify"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"google.golang.org/protobuf/proto"
-	"time"
 )
 
 func notifyHandler(event *eventctrl.Event, routingKey, queueName string) {
@@ -154,6 +155,11 @@ func notifyHandler(event *eventctrl.Event, routingKey, queueName string) {
 				title.String(), t, event.SenderId,
 			)
 			notify.Notify("Event Manager", event.Name, text, "/home/r0ot/Documents/simple-grpc/configs/icon.png")
+			err = ch.Ack(message.DeliveryTag, false)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				return
+			}
 		}
 	}()
 

@@ -8,13 +8,12 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	"github.com/Raimguzhinov/simple-grpc/internal/service"
 	eventcrtl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 func TestRunEventsService(t *testing.T) {

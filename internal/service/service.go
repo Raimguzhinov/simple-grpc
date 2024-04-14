@@ -3,13 +3,14 @@ package service
 import (
 	"container/list"
 	"context"
+	"log"
+	"sync"
+	"time"
+
 	"github.com/Raimguzhinov/go-webdav/caldav"
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 	"github.com/google/uuid"
-	"log"
-	"sync"
-	"time"
 )
 
 type Server struct {
@@ -163,7 +164,11 @@ func (s *Server) MakeEvent(
 
 	if s.calDAVServer != nil && len(s.calendars) > 0 {
 		go func() {
-			err := s.calDAVServer.PutCalendarObject(context.Background(), event.ICalObjectBuilder(req), s.calendars[0])
+			err := s.calDAVServer.PutCalendarObject(
+				context.Background(),
+				event.ICalObjectBuilder(req),
+				s.calendars[0],
+			)
 			if err != nil {
 				log.Println("Can't put event to calendar", err)
 			}
@@ -249,7 +254,11 @@ func (s *Server) DeleteEvent(
 
 			if s.calDAVServer != nil && len(s.calendars) > 0 {
 				go func() {
-					err = s.calDAVServer.DeleteCalendarObject(context.Background(), eventID, s.calendars[0])
+					err = s.calDAVServer.DeleteCalendarObject(
+						context.Background(),
+						eventID,
+						s.calendars[0],
+					)
 					if err != nil {
 						log.Println("Can't delete event from calendar", err)
 					}

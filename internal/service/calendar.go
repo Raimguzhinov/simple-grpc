@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
+
 	"github.com/Raimguzhinov/go-webdav"
 	"github.com/Raimguzhinov/go-webdav/caldav"
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	"github.com/emersion/go-ical"
 	"github.com/google/uuid"
-	"log"
-	"net/http"
-	"strconv"
-	"time"
 )
 
 type Calendar struct {
@@ -41,7 +42,11 @@ func NewCalendarService(caldavUrl string, caldavLogin string, caldavPassword str
 }
 
 func (c *Calendar) getClient() (*caldav.Client, error) {
-	httpClient := webdav.HTTPClientWithBasicAuth(&http.Client{Transport: &transport{}}, c.caldavLogin, c.caldavPassword)
+	httpClient := webdav.HTTPClientWithBasicAuth(
+		&http.Client{Transport: &transport{}},
+		c.caldavLogin,
+		c.caldavPassword,
+	)
 	client, err := caldav.NewClient(httpClient, c.caldavUrl)
 	return client, err
 }
@@ -50,27 +55,47 @@ func (c *Calendar) GetCalendars(ctx context.Context) ([]caldav.Calendar, error) 
 	client, err := c.getClient()
 	if err != nil {
 		log.Println("Error get client for principal", &c.caldavLogin, err)
-		return make([]caldav.Calendar, 0), errors.New(fmt.Sprintf("Error get client in principal method for user %s", c.caldavLogin))
+		return make(
+				[]caldav.Calendar,
+				0,
+			), errors.New(
+				fmt.Sprintf("Error get client in principal method for user %s", c.caldavLogin),
+			)
 	}
 	principal, err := client.FindCurrentUserPrincipal(ctx)
 	if err != nil {
 		log.Println("Error get principal", &c.caldavLogin, err)
-		return make([]caldav.Calendar, 0), errors.New(fmt.Sprintf("Error get principal for user %s", c.caldavLogin))
+		return make(
+				[]caldav.Calendar,
+				0,
+			), errors.New(
+				fmt.Sprintf("Error get principal for user %s", c.caldavLogin),
+			)
 	}
 	calendarHomeSet, err := client.FindCalendarHomeSet(ctx, principal)
 	if err != nil {
 		log.Println("Error get calendarHomeSet", &c.caldavLogin, err)
-		return make([]caldav.Calendar, 0), errors.New(fmt.Sprintf("Error get calendarHomeSet for user %s", c.caldavLogin))
+		return make(
+				[]caldav.Calendar,
+				0,
+			), errors.New(
+				fmt.Sprintf("Error get calendarHomeSet for user %s", c.caldavLogin),
+			)
 	}
 	return client.FindCalendars(ctx, calendarHomeSet)
 }
 
-func (c *Calendar) LoadEvents(ctx context.Context, calendar caldav.Calendar) ([]*models.Event, error) {
+func (c *Calendar) LoadEvents(
+	ctx context.Context,
+	calendar caldav.Calendar,
+) ([]*models.Event, error) {
 	var events []*models.Event
 	client, err := c.getClient()
 	if err != nil {
 		log.Println("Error get client for principal", &c.caldavLogin, err)
-		return events, errors.New(fmt.Sprintf("Error get client in principal method for user %s", c.caldavLogin))
+		return events, errors.New(
+			fmt.Sprintf("Error get client in principal method for user %s", c.caldavLogin),
+		)
 	}
 	calendarObjects, err := c.queryCalendarEvents(ctx, client, calendar.Path)
 	if calendarObjects == nil {
@@ -90,7 +115,11 @@ func (c *Calendar) LoadEvents(ctx context.Context, calendar caldav.Calendar) ([]
 	return events, nil
 }
 
-func (c *Calendar) PutCalendarObject(ctx context.Context, cal *ical.Calendar, calendars ...caldav.Calendar) error {
+func (c *Calendar) PutCalendarObject(
+	ctx context.Context,
+	cal *ical.Calendar,
+	calendars ...caldav.Calendar,
+) error {
 	client, err := c.getClient()
 	if err != nil {
 		return err
@@ -106,7 +135,11 @@ func (c *Calendar) PutCalendarObject(ctx context.Context, cal *ical.Calendar, ca
 	return nil
 }
 
-func (c *Calendar) DeleteCalendarObject(ctx context.Context, eventID uuid.UUID, calendars ...caldav.Calendar) error {
+func (c *Calendar) DeleteCalendarObject(
+	ctx context.Context,
+	eventID uuid.UUID,
+	calendars ...caldav.Calendar,
+) error {
 	client, err := c.getClient()
 	if err != nil {
 		return err
@@ -124,8 +157,8 @@ func (c *Calendar) DeleteCalendarObject(ctx context.Context, eventID uuid.UUID, 
 func (c *Calendar) queryCalendarEvents(
 	ctx context.Context,
 	client *caldav.Client,
-	calendarPath string) ([]caldav.CalendarObject, error) {
-
+	calendarPath string,
+) ([]caldav.CalendarObject, error) {
 	query := &caldav.CalendarQuery{
 		CompFilter: caldav.CompFilter{
 			Name: "VCALENDAR",
@@ -137,7 +170,10 @@ func (c *Calendar) queryCalendarEvents(
 	return client.QueryCalendar(ctx, calendarPath, query)
 }
 
-func CalendarObjectToEventArray(calendarObjects []caldav.CalendarObject, timezone string) ([]*models.Event, error) {
+func CalendarObjectToEventArray(
+	calendarObjects []caldav.CalendarObject,
+	timezone string,
+) ([]*models.Event, error) {
 	eventById := make(map[uuid.UUID]*models.Event)
 	for _, calendarObject := range calendarObjects {
 		for _, e := range calendarObject.Data.Events() {
@@ -177,7 +213,10 @@ func CalendarObjectToEventArray(calendarObjects []caldav.CalendarObject, timezon
 
 			lastModifiedTime, err := e.Props.DateTime("LAST-MODIFIED", location)
 			if err != nil {
-				return nil, errors.Join(err, errors.New("Can't parse LAST-MODIFIED for event "+eventName))
+				return nil, errors.Join(
+					err,
+					errors.New("Can't parse LAST-MODIFIED for event "+eventName),
+				)
 			}
 
 			log.Printf(

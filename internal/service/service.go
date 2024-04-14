@@ -98,26 +98,29 @@ func (s *Server) syncWithCalendars() {
 
 func (s *Server) bypassTimer() {
 	for {
+		s.Lock()
 		if s.eventsList.Len() == 0 {
+			s.Unlock()
 			<-s.listUpdated
 			continue
 		}
 		eventPtr := s.eventsList.Front()
 		event := eventPtr.Value.(*models.Event)
-
 		t1 := time.Now().UTC()
 		t2 := time.UnixMilli(event.Time).UTC()
 		timeDuration := t2.Sub(t1)
 		if timeDuration <= 0 {
+			s.Unlock()
 			_ = s.PassedEvents(t1)
 			continue
 		}
 		timer := time.NewTimer(timeDuration)
+		s.Unlock()
 
 		select {
 		case <-timer.C:
-			s.brokerChan <- event
 			s.Lock()
+			s.brokerChan <- event
 			delete(s.sessions[event.SenderID], event.ID)
 			s.eventsList.Remove(eventPtr)
 			s.Unlock()
@@ -128,19 +131,20 @@ func (s *Server) bypassTimer() {
 }
 
 func (s *Server) PassedEvents(currentTime time.Time) int {
+	s.Lock()
+	defer s.Unlock()
 	for e := s.eventsList.Front(); e != nil; {
 		event := e.Value.(*models.Event)
 		eventTime := time.UnixMilli(event.Time).UTC()
 		timeDuration := eventTime.Sub(currentTime)
 
 		if timeDuration <= 0 {
-			s.brokerChan <- event
-			s.Lock()
+			// TODO: Push old events to broker again?
+			// s.brokerChan <- event
 			next := e.Next()
 			delete(s.sessions[event.SenderID], event.ID)
 			s.eventsList.Remove(e)
 			e = next
-			s.Unlock()
 			continue
 		}
 		break

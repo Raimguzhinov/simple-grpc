@@ -1,21 +1,20 @@
 package user
 
 import (
-	"bufio"
 	"context"
 	"fmt"
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	"github.com/emersion/go-ical"
+	"github.com/erikgeiser/promptkit/confirmation"
+	"github.com/erikgeiser/promptkit/selection"
+	"github.com/erikgeiser/promptkit/textinput"
+	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/structpb"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/erikgeiser/promptkit/confirmation"
-	"github.com/erikgeiser/promptkit/selection"
-	"github.com/erikgeiser/promptkit/textinput"
-	"github.com/google/uuid"
-
-	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 type ClientManager interface {
@@ -49,12 +48,11 @@ func RunEventsClient(client eventctrl.EventsClient, senderID int64) {
 	routingKey := strconv.Itoa(int(senderID))
 	queueName := strconv.Itoa(int(senderID))
 
-	f := bufio.NewWriter(os.Stdout)
-	go notifyHandler(&eventctrl.Event{}, routingKey, queueName, f)
+	go notifyHandler(&eventctrl.Event{}, routingKey, queueName)
 
 	fmt.Println("Choose procedure: MakeEvent, GetEvent, DeleteEvent, GetEvents")
 	for {
-		switch u.promtPicker(f) {
+		switch u.promtPicker() {
 		case "MakeEvent":
 			u.EventMaker(senderID, u.promtMaker(), os.Stdout)
 		case "GetEvent":
@@ -81,21 +79,34 @@ func (u *User) EventMaker(senderID int64, promt string, w io.Writer) {
 	dateTime := locDateTime.UTC()
 	if err != nil {
 		fmt.Fprintln(w, ErrBadDateTime)
-	} else {
-		res, err := u.MakeEvent(context.Background(), &eventctrl.MakeEventRequest{
-			SenderId: senderID,
-			Time:     dateTime.UnixMilli(),
-			Name:     eventName,
-		})
-		if err != nil {
-			fmt.Fprintln(w, ErrUnexpected)
-		}
-		eventID, err := uuid.FromBytes(res.EventId)
-		if err != nil {
-			return
-		}
-		fmt.Fprintf(w, "Created {%s}\n", eventID)
+		return
 	}
+	m := map[string]interface{}{
+		"X-PROTEI-SENDERID":    senderID,
+		ical.PropDescription:   eventName,
+		ical.PropCreated:       time.Now().UnixMilli(),
+		ical.PropLastModified:  time.Now().UnixMilli(),
+		ical.PropDateTimeStart: dateTime.UnixMilli(),
+		ical.PropDateTimeEnd:   dateTime.Add(time.Hour * 24).UnixMilli(),
+	}
+	details, err := structpb.NewStruct(m)
+	if err != nil {
+		panic(err)
+	}
+	res, err := u.MakeEvent(context.Background(), &eventctrl.MakeEventRequest{
+		SenderId: senderID,
+		Time:     dateTime.UnixMilli(),
+		Name:     eventName,
+		Details:  details,
+	})
+	if err != nil {
+		fmt.Fprintln(w, ErrUnexpected)
+	}
+	eventID, err := uuid.FromBytes(res.EventId)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "Created {%s}\n", eventID)
 }
 
 func (u *User) EventGetter(senderID int64, promt string, w io.Writer) {
@@ -167,37 +178,36 @@ func (u *User) EventsGetter(senderID int64, promt string, w io.Writer) {
 
 	if err1 != nil || err2 != nil {
 		fmt.Fprintln(w, ErrBadDateTime)
-	} else {
-		stream, err := u.GetEvents(context.Background(), &eventctrl.GetEventsRequest{
-			SenderId: senderID,
-			FromTime: dateTimeFrom.UnixMilli(),
-			ToTime:   dateTimeTo.UnixMilli(),
-		})
-		if err != nil {
-			fmt.Fprintln(w, ErrUnexpected)
-		} else {
-			for i := 0; ; i++ {
-				res, err := stream.Recv()
-				if err == io.EOF {
-					if i == 0 {
-						fmt.Fprintln(w, ErrNotFound)
-					}
-					break
-				}
-				eventID, err := uuid.FromBytes(res.EventId)
-				if err != nil {
-					fmt.Fprintln(w, ErrNotFound)
-					return
-				}
-				t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
-				fmt.Fprintf(w, "Event {\n  senderId: %d\n  eventId: %s\n  time: %s\n  name: '%s'\n}\n", res.SenderId, eventID, t, res.Name)
+		return
+	}
+	stream, err := u.GetEvents(context.Background(), &eventctrl.GetEventsRequest{
+		SenderId: senderID,
+		FromTime: dateTimeFrom.UnixMilli(),
+		ToTime:   dateTimeTo.UnixMilli(),
+	})
+	if err != nil {
+		fmt.Fprintln(w, ErrUnexpected)
+		return
+	}
+	for i := 0; ; i++ {
+		res, err := stream.Recv()
+		if err == io.EOF {
+			if i == 0 {
+				fmt.Fprintln(w, ErrNotFound)
 			}
+			break
 		}
+		eventID, err := uuid.FromBytes(res.EventId)
+		if err != nil {
+			fmt.Fprintln(w, ErrNotFound)
+			return
+		}
+		t := time.UnixMilli(res.Time).Local().Format(time.DateTime)
+		fmt.Fprintf(w, "Event {\n  senderId: %d\n  eventId: %s\n  time: %s\n  name: '%s'\n}\n", res.SenderId, eventID, t, res.Name)
 	}
 }
 
-func (u *User) promtPicker(f *bufio.Writer) string {
-	f.Flush()
+func (u *User) promtPicker() string {
 	sp := selection.New(
 		"\nWhat do you pick?",
 		[]string{"MakeEvent", "GetEvent", "DeleteEvent", "GetEvents", "exit"},

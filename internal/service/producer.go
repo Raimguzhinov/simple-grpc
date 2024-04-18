@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -12,12 +13,19 @@ import (
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 )
 
-func publish(pubChan chan *models.Event) {
-	const (
-		exchange    = "event.ex"
-		reconnDelay = 5
-	)
+type Broker struct {
+	url         string
+	login       string
+	password    string
+	exchange    string
+	reconnDelay time.Duration
+}
 
+func NewBroker(url, login, password, exchange string, reconnDelay uint) *Broker {
+	return &Broker{url, login, password, exchange, time.Duration(reconnDelay)}
+}
+
+func (b *Broker) publish(pubChan chan *models.Event) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
@@ -36,13 +44,13 @@ func publish(pubChan chan *models.Event) {
 				log.Printf("Unable to open a channel. Error: %s", err)
 			}
 			if err := ch.ExchangeDeclare(
-				exchange, // exchange name
-				"direct", // type
-				true,     // durable
-				false,    // delete when unused
-				false,    // exclusive
-				false,    // no-wait
-				nil,      // arguments
+				b.exchange, // exchange name
+				"direct",   // type
+				true,       // durable
+				false,      // delete when unused
+				false,      // exclusive
+				false,      // no-wait
+				nil,        // arguments
 			); err != nil {
 				log.Printf("Unable to declare exchange. Error: %s", err)
 			}
@@ -50,7 +58,13 @@ func publish(pubChan chan *models.Event) {
 
 		redial := func() error {
 			var err error
-			conn, err = amqp.Dial("amqp://guest:guest@localhost:5672/")
+			var url string
+			partUrl, found := strings.CutPrefix(b.url, "amqp://")
+			if !found {
+				log.Println("Unable to parse url")
+			}
+			url = "amqp://" + b.login + ":" + b.password + "@" + partUrl
+			conn, err = amqp.Dial(url)
 			if err != nil {
 				log.Println("Unable to connect to RabbitMQ")
 				return err
@@ -64,7 +78,7 @@ func publish(pubChan chan *models.Event) {
 			if err := redial(); err == nil {
 				break
 			}
-			time.Sleep(reconnDelay * time.Second)
+			time.Sleep(b.reconnDelay * time.Second)
 		}
 
 		go func() {
@@ -78,7 +92,7 @@ func publish(pubChan chan *models.Event) {
 				}
 				log.Printf("Will reconnect because connection closed with reason: %v\n", reason)
 				for {
-					time.Sleep(reconnDelay * time.Second)
+					time.Sleep(b.reconnDelay * time.Second)
 					if err := redial(); err == nil {
 						break
 					}
@@ -96,7 +110,7 @@ func publish(pubChan chan *models.Event) {
 				}
 				log.Printf("Will reconnect because channel is closed with reason: %v\n", reason)
 				for {
-					time.Sleep(reconnDelay * time.Second)
+					time.Sleep(b.reconnDelay * time.Second)
 					rechannel()
 				}
 			}
@@ -114,7 +128,7 @@ func publish(pubChan chan *models.Event) {
 				for {
 					if err := ch.PublishWithContext(
 						ctx,
-						exchange,
+						b.exchange,
 						strconv.Itoa(int(event.SenderID)),
 						false,
 						false,
@@ -125,7 +139,7 @@ func publish(pubChan chan *models.Event) {
 					} else {
 						log.Printf("Unable to publish event. Error: %s\n", err)
 					}
-					time.Sleep(reconnDelay * time.Second)
+					time.Sleep(b.reconnDelay * time.Second)
 				}
 			}()
 		}

@@ -1,17 +1,17 @@
 package user
 
 import (
-	"bufio"
 	"fmt"
 	"time"
 
+	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	"github.com/google/uuid"
+	"github.com/martinlindhe/notify"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"google.golang.org/protobuf/proto"
-
-	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
-func notifyHandler(event *eventctrl.Event, routingKey, queueName string, f *bufio.Writer) {
+func notifyHandler(event *eventctrl.Event, routingKey, queueName string) {
 	const (
 		exchange    = "event.ex"
 		reconnDelay = 5
@@ -148,15 +148,15 @@ func notifyHandler(event *eventctrl.Event, routingKey, queueName string, f *bufi
 				return
 			}
 
-			t := time.UnixMilli(event.Time).Local().Format(time.DateTime)
-			str := fmt.Sprintf(
-				"\nNotification!\nEvent {\n  senderId: %d\n  eventId: %d\n  time: %s\n  name: '%s'\n}\n",
-				event.SenderId,
-				event.EventId,
-				t,
-				event.Name,
+			t := time.UnixMilli(event.Time).Local().Format(time.TimeOnly)
+			title, _ := uuid.FromBytes(event.EventId)
+			text := fmt.Sprintf(
+				"ID: '%s'\nTime: %s\nSender:%d\n",
+				title.String(), t, event.SenderId,
 			)
-			if _, err := f.WriteString(str); err != nil {
+			notify.Notify("Event Manager", event.Name, text, "/home/r0ot/Documents/Protei/simple-grpc/notification.png")
+			err = ch.Ack(message.DeliveryTag, false)
+			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				return
 			}

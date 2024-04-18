@@ -18,7 +18,7 @@ func main() {
 	var port uint
 	var senderID int64
 	flag.StringVar(&remote, "dst", "localhost", "remote address")
-	flag.UintVar(&port, "p", 8080, "port number")
+	flag.UintVar(&port, "p", 8089, "port number")
 	flag.Int64Var(&senderID, "sender-id", 1, "sender id")
 	flag.Parse()
 

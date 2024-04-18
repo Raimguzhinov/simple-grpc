@@ -1,0 +1,16 @@
+# Events config
+server:
+  host: 127.0.0.1
+  port: 8089
+
+caldav:
+  url: http://localhost:8081/remote.php/dav
+  login: admin
+  password: admin
+
+rabbitmq:
+  url: amqp://localhost:5672
+  login: guest
+  password: guest
+  exchange: event.ex
+  reconnection_delay: 5

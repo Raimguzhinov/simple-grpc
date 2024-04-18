@@ -154,7 +154,7 @@ func notifyHandler(event *eventctrl.Event, routingKey, queueName string) {
 				"ID: '%s'\nTime: %s\nSender:%d\n",
 				title.String(), t, event.SenderId,
 			)
-			notify.Notify("Event Manager", event.Name, text, "/home/r0ot/Documents/simple-grpc/configs/icon.png")
+			notify.Notify("Event Manager", event.Name, text, "/home/r0ot/Documents/Protei/simple-grpc/notification.png")
 			err = ch.Ack(message.DeliveryTag, false)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)

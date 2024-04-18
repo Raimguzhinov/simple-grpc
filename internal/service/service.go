@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/Raimguzhinov/go-webdav/caldav"
+	"github.com/google/uuid"
+
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
-	"github.com/google/uuid"
 )
 
 type Server struct {
@@ -21,25 +22,23 @@ type Server struct {
 	calendars    []caldav.Calendar
 	sessions     map[int64]map[uuid.UUID]*list.Element
 	eventsList   *list.List
-	brokerChan   chan *models.Event
-	listUpdated  chan bool
+
+	broker      *Broker
+	brokerChan  chan *models.Event
+	listUpdated chan bool
 }
 
 func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
-	pubChan := make(chan *models.Event, 10000)
-	publish(pubChan)
-
 	srv := Server{
 		sessions:    make(map[int64]map[uuid.UUID]*list.Element),
 		eventsList:  list.New(),
-		brokerChan:  pubChan,
+		brokerChan:  make(chan *models.Event, 10000),
 		listUpdated: make(chan bool, 1),
 	}
 	for _, event := range events {
 		_, _ = srv.MakeEvent(context.Background(), event)
 	}
 	go srv.bypassTimer()
-
 	return &srv
 }
 
@@ -51,6 +50,11 @@ func (s *Server) RegisterCalDAVServer(calDAVServer *Calendar) {
 	s.calDAVServer = calDAVServer
 	s.calendars = calendars
 	go s.syncWithCalendars()
+}
+
+func (s *Server) RegisterBrokerServer(brokerServer *Broker) {
+	s.broker = brokerServer
+	s.broker.publish(s.brokerChan)
 }
 
 func (s *Server) IsInitialized() bool {

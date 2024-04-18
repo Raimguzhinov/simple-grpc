@@ -88,40 +88,6 @@ func (m *MockClientConn) NewStream(
 	}
 }
 
-type MockClientStream interface {
-	Header() (metadata.MD, error)
-	Trailer() metadata.MD
-	CloseSend() error
-	Context() context.Context
-	SendMsg(m any) error
-	RecvMsg(m any) error
-}
-
-type mockClientStream struct {
-	grpc.ClientStream
-	resvCount   int
-	respStr     string
-	customID    []byte
-	currentTime time.Time
-}
-
-func NewMockClientStream(eventID uuid.UUID, currentTime time.Time) grpc.ClientStream {
-	binUID, _ := eventID.MarshalBinary()
-	return &mockClientStream{
-		customID:    binUID,
-		currentTime: currentTime,
-	}
-}
-
-func (m *mockClientStream) SendMsg(msg any) error {
-	m.respStr = fmt.Sprintf("%+v\n", msg)
-	return nil
-}
-
-func (m *mockClientStream) CloseSend() error {
-	return nil
-}
-
 func TestMakeEvent(t *testing.T) {
 	mockConn := NewMockClientConn()
 	currentTime := time.Now()
@@ -321,6 +287,40 @@ func TestGetEvents(t *testing.T) {
 			require.Equal(t, testCase.expected, buf.String())
 		})
 	}
+}
+
+type MockClientStream interface {
+	Header() (metadata.MD, error)
+	Trailer() metadata.MD
+	CloseSend() error
+	Context() context.Context
+	SendMsg(m any) error
+	RecvMsg(m any) error
+}
+
+type mockClientStream struct {
+	grpc.ClientStream
+	resvCount   int
+	respStr     string
+	customID    []byte
+	currentTime time.Time
+}
+
+func NewMockClientStream(eventID uuid.UUID, currentTime time.Time) MockClientStream {
+	binUID, _ := eventID.MarshalBinary()
+	return &mockClientStream{
+		customID:    binUID,
+		currentTime: currentTime,
+	}
+}
+
+func (m *mockClientStream) SendMsg(msg any) error {
+	m.respStr = fmt.Sprintf("%+v\n", msg)
+	return nil
+}
+
+func (m *mockClientStream) CloseSend() error {
+	return nil
 }
 
 func (m *mockClientStream) RecvMsg(msg any) error {

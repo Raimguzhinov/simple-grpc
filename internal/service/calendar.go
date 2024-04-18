@@ -9,11 +9,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Raimguzhinov/go-webdav"
+	webdav "github.com/Raimguzhinov/go-webdav"
 	"github.com/Raimguzhinov/go-webdav/caldav"
-	"github.com/Raimguzhinov/simple-grpc/internal/models"
-	"github.com/emersion/go-ical"
+	ical "github.com/emersion/go-ical"
 	"github.com/google/uuid"
+
+	"github.com/Raimguzhinov/simple-grpc/internal/models"
 )
 
 type Calendar struct {
@@ -54,33 +55,27 @@ func (c *Calendar) getClient() (*caldav.Client, error) {
 func (c *Calendar) GetCalendars(ctx context.Context) ([]caldav.Calendar, error) {
 	client, err := c.getClient()
 	if err != nil {
-		log.Println("Error get client for principal", &c.caldavLogin, err)
+		log.Println("error get client for principal", &c.caldavLogin, err)
 		return make(
-				[]caldav.Calendar,
-				0,
-			), errors.New(
-				fmt.Sprintf("Error get client in principal method for user %s", c.caldavLogin),
-			)
+			[]caldav.Calendar,
+			0,
+		), fmt.Errorf("error get client in principal method for user %s", c.caldavLogin)
 	}
 	principal, err := client.FindCurrentUserPrincipal(ctx)
 	if err != nil {
-		log.Println("Error get principal", &c.caldavLogin, err)
+		log.Println("error get principal", &c.caldavLogin, err)
 		return make(
-				[]caldav.Calendar,
-				0,
-			), errors.New(
-				fmt.Sprintf("Error get principal for user %s", c.caldavLogin),
-			)
+			[]caldav.Calendar,
+			0,
+		), fmt.Errorf("error get principal for user %s", c.caldavLogin)
 	}
 	calendarHomeSet, err := client.FindCalendarHomeSet(ctx, principal)
 	if err != nil {
 		log.Println("Error get calendarHomeSet", &c.caldavLogin, err)
 		return make(
-				[]caldav.Calendar,
-				0,
-			), errors.New(
-				fmt.Sprintf("Error get calendarHomeSet for user %s", c.caldavLogin),
-			)
+			[]caldav.Calendar,
+			0,
+		), fmt.Errorf("error get calendarHomeSet for user %s", c.caldavLogin)
 	}
 	return client.FindCalendars(ctx, calendarHomeSet)
 }
@@ -93,23 +88,21 @@ func (c *Calendar) LoadEvents(
 	client, err := c.getClient()
 	if err != nil {
 		log.Println("Error get client for principal", &c.caldavLogin, err)
-		return events, errors.New(
-			fmt.Sprintf("Error get client in principal method for user %s", c.caldavLogin),
-		)
+		return events, fmt.Errorf("error get client in principal method for user %s", c.caldavLogin)
 	}
 	calendarObjects, err := c.queryCalendarEvents(ctx, client, calendar.Path)
 	if calendarObjects == nil {
-		log.Println("Can't get events for calendar "+calendar.Path, err)
-		return events, errors.New("Can't get events from calendar")
+		log.Println("can't get events for calendar "+calendar.Path, err)
+		return events, fmt.Errorf("can't get events from calendar")
 	}
 	timezone, err := GetTimezone(calendarObjects)
 	if err != nil {
-		log.Println("Can't get timezone for calendar "+calendar.Path, err)
+		log.Println("can't get timezone for calendar "+calendar.Path, err)
 	}
 	eventDtos, err := CalendarObjectToEventArray(calendarObjects, timezone)
 	if err != nil {
 		log.Println("Can't parse events for calendar "+calendar.Path, err)
-		return events, errors.New("Can't parse events from calendar")
+		return events, fmt.Errorf("can't parse events from calendar")
 	}
 	events = append(events, eventDtos...)
 	return events, nil
@@ -193,29 +186,29 @@ func CalendarObjectToEventArray(
 
 			createdTime, err := e.Props.DateTime("CREATED", location)
 			if err != nil {
-				return nil, errors.Join(err, errors.New("Can't parse CREATED for event "+eventName))
+				return nil, errors.Join(err, fmt.Errorf("can't parse CREATED for event "+eventName))
 			}
 
 			startTime, err := e.Props.DateTime("DTSTART", location)
 			if err != nil {
-				return nil, errors.Join(err, errors.New("Can't parse DTSTART for event "+eventName))
+				return nil, errors.Join(err, fmt.Errorf("can't parse DTSTART for event "+eventName))
 			}
 
 			endTime, err := e.Props.DateTime("DTEND", location)
 			if err != nil {
-				return nil, errors.Join(err, errors.New("Can't parse DTEND for event "+eventName))
+				return nil, errors.Join(err, fmt.Errorf("can't parse DTEND for event "+eventName))
 			}
 
 			dtstamp, err := e.Props.DateTime("DTSTAMP", location)
 			if err != nil {
-				return nil, errors.Join(err, errors.New("Can't parse DTSTAMP for event "+eventName))
+				return nil, errors.Join(err, fmt.Errorf("can't parse DTSTAMP for event "+eventName))
 			}
 
 			lastModifiedTime, err := e.Props.DateTime("LAST-MODIFIED", location)
 			if err != nil {
 				return nil, errors.Join(
 					err,
-					errors.New("Can't parse LAST-MODIFIED for event "+eventName),
+					fmt.Errorf("can't parse LAST-MODIFIED for event "+eventName),
 				)
 			}
 
@@ -262,7 +255,7 @@ func GetTimezone(calendarObjects []caldav.CalendarObject) (string, error) {
 			}
 		}
 	}
-	return "Etc/UTC", errors.New("Timezone not found")
+	return "Etc/UTC", fmt.Errorf("timezone not found")
 }
 
 func getPropertyValue(prop *ical.Prop) string {

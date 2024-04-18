@@ -2,11 +2,10 @@ package configs
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"os"
-)
 
-const configPath = "/home/r0ot/Documents/simple-grpc/config.yml"
+	yaml "gopkg.in/yaml.v3"
+)
 
 type Config struct {
 	EventServer struct {
@@ -19,9 +18,17 @@ type Config struct {
 		Login    string `yaml:"login"`
 		Password string `yaml:"password"`
 	} `yaml:"caldav"`
+
+	RabbitmqServer struct {
+		Url         string `yaml:"url"`
+		Login       string `yaml:"login"`
+		Password    string `yaml:"password"`
+		Exchange    string `yaml:"exchange"`
+		ReconnDelay uint   `yaml:"reconnection_delay"`
+	} `yaml:"rabbitmq"`
 }
 
-func New() (*Config, error) {
+func New(configPath string) (*Config, error) {
 	config := &Config{}
 	if err := validateConfigPath(configPath); err != nil {
 		return nil, err

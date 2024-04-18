@@ -8,12 +8,13 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"github.com/Raimguzhinov/simple-grpc/internal/models"
-	"github.com/Raimguzhinov/simple-grpc/internal/service"
-	eventcrtl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+
+	"github.com/Raimguzhinov/simple-grpc/internal/models"
+	"github.com/Raimguzhinov/simple-grpc/internal/service"
+	eventcrtl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 )
 
 func TestRunEventsService(t *testing.T) {
@@ -248,13 +249,11 @@ func SetupTest(
 ) (*service.Server, *map[int64]map[string][]byte) {
 	s := service.RunEventsService()
 	var idMap *map[int64]map[string][]byte
-	t.Run("Mocking events", func(t *testing.T) {
-		var err error
-		idMap, err = MockEventMaker(t, s, currentTime.UnixMilli())
-		if err != nil {
-			t.Error(err)
-		}
-	})
+	var err error
+	idMap, err = MockEventMaker(t, s, currentTime.UnixMilli())
+	if err != nil {
+		t.Error(err)
+	}
 	t.Log("Events created")
 	return s, idMap
 }

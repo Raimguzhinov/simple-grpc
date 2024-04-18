@@ -102,9 +102,9 @@ func (s *Server) syncWithCalendars() {
 
 func (s *Server) bypassTimer() {
 	for {
-		s.Lock()
+		//s.Lock()
 		if s.eventsList.Len() == 0 {
-			s.Unlock()
+			//s.Unlock()
 			<-s.listUpdated
 			continue
 		}
@@ -114,12 +114,12 @@ func (s *Server) bypassTimer() {
 		t2 := time.UnixMilli(event.Time).UTC()
 		timeDuration := t2.Sub(t1)
 		if timeDuration <= 0 {
-			s.Unlock()
+			//s.Unlock()
 			_ = s.PassedEvents(t1)
 			continue
 		}
 		timer := time.NewTimer(timeDuration)
-		s.Unlock()
+		//s.Unlock()
 
 		select {
 		case <-timer.C:
@@ -296,8 +296,8 @@ func (s *Server) GetEvents(
 	req *eventctrl.GetEventsRequest,
 	stream eventctrl.Events_GetEventsServer,
 ) error {
-	s.Lock()
-	defer s.Unlock()
+	s.RLock()
+	defer s.RUnlock()
 	foundEvent := false
 
 	if _, isExist := s.sessions[req.SenderId]; isExist {

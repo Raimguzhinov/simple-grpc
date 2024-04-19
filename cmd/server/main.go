@@ -45,10 +45,11 @@ func main() {
 		cfg.RabbitmqServer.Exchange,
 		cfg.RabbitmqServer.ReconnDelay,
 	)
+	_ = cal
 
 	eventsrv := service.RunEventsService()
-	eventsrv.RegisterCalDAVServer(cal)
 	eventsrv.RegisterBrokerServer(broker)
+	eventsrv.RegisterCalDAVServer(cal)
 
 	eventctrl.RegisterEventsServer(s, eventsrv)
 

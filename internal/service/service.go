@@ -25,7 +25,7 @@ type Server struct {
 
 	broker      *Broker
 	brokerChan  chan *models.Event
-	listUpdated chan bool
+	listUpdated chan struct{}
 }
 
 func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
@@ -33,7 +33,7 @@ func RunEventsService(events ...*eventctrl.MakeEventRequest) *Server {
 		sessions:    make(map[int64]map[uuid.UUID]*list.Element),
 		eventsList:  list.New(),
 		brokerChan:  make(chan *models.Event, 10000),
-		listUpdated: make(chan bool, 1),
+		listUpdated: make(chan struct{}, 1),
 	}
 	for _, event := range events {
 		_, _ = srv.MakeEvent(context.Background(), event)
@@ -82,7 +82,7 @@ func (s *Server) syncWithCalendars() {
 		var eventPtr *list.Element
 		if s.eventsList.Len() == 0 {
 			eventPtr = s.eventsList.PushBack(req)
-			s.listUpdated <- true
+			s.listUpdated <- struct{}{}
 		} else {
 			for e := s.eventsList.Back(); e != nil; e = e.Prev() {
 				item := e.Value.(*models.Event)
@@ -91,7 +91,7 @@ func (s *Server) syncWithCalendars() {
 					break
 				} else if e == s.eventsList.Front() && item.Time > req.Time {
 					eventPtr = s.eventsList.InsertBefore(req, e)
-					s.listUpdated <- true
+					s.listUpdated <- struct{}{}
 					break
 				}
 			}
@@ -172,13 +172,18 @@ func (s *Server) MakeEvent(
 
 	if s.calDAVServer != nil && len(s.calendars) > 0 {
 		go func() {
-			err := s.calDAVServer.PutCalendarObject(
-				context.Background(),
-				event.ICalObjectBuilder(req),
-				s.calendars[0],
-			)
-			if err != nil {
-				log.Println("Can't put event to calendar", err)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				err := s.calDAVServer.PutCalendarObject(
+					context.Background(),
+					event.ICalObjectBuilder(req),
+					s.calendars[0],
+				)
+				if err != nil {
+					log.Println("Can't put event to calendar", err)
+				}
 			}
 		}()
 	}
@@ -190,7 +195,7 @@ func (s *Server) MakeEvent(
 	var eventPtr *list.Element
 	if s.eventsList.Len() == 0 {
 		eventPtr = s.eventsList.PushBack(event)
-		s.listUpdated <- true
+		s.listUpdated <- struct{}{}
 	} else {
 		for e := s.eventsList.Back(); e != nil; e = e.Prev() {
 			item := e.Value.(*models.Event)
@@ -199,7 +204,7 @@ func (s *Server) MakeEvent(
 				break
 			} else if e == s.eventsList.Front() && item.Time > event.Time {
 				eventPtr = s.eventsList.InsertBefore(event, e)
-				s.listUpdated <- true
+				s.listUpdated <- struct{}{}
 				break
 			}
 		}
@@ -262,13 +267,18 @@ func (s *Server) DeleteEvent(
 
 			if s.calDAVServer != nil && len(s.calendars) > 0 {
 				go func() {
-					err = s.calDAVServer.DeleteCalendarObject(
-						context.Background(),
-						eventID,
-						s.calendars[0],
-					)
-					if err != nil {
-						log.Println("Can't delete event from calendar", err)
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						err = s.calDAVServer.DeleteCalendarObject(
+							context.Background(),
+							eventID,
+							s.calendars[0],
+						)
+						if err != nil {
+							log.Println("Can't delete event from calendar", err)
+						}
 					}
 				}()
 			}
@@ -277,7 +287,7 @@ func (s *Server) DeleteEvent(
 			s.eventsList.Remove(eventPtr)
 
 			if eventPtr.Value == frontItem {
-				s.listUpdated <- true
+				s.listUpdated <- struct{}{}
 			}
 
 			binUID, err := eventID.MarshalBinary()
@@ -324,8 +334,8 @@ func (s *Server) IsEventExist(senderID int64, binUID []byte) bool {
 	defer s.RUnlock()
 	if eventsByClient, isCreated := s.sessions[senderID]; isCreated {
 		eventID, _ := uuid.FromBytes(binUID)
-		if _, isExist := eventsByClient[eventID]; isCreated {
-			return isExist
+		if _, isExist := eventsByClient[eventID]; isExist {
+			return true
 		}
 	}
 	return false

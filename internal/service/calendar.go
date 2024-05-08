@@ -9,12 +9,11 @@ import (
 	"strconv"
 	"time"
 
-	webdav "github.com/Raimguzhinov/go-webdav"
-	"github.com/Raimguzhinov/go-webdav/caldav"
-	ical "github.com/emersion/go-ical"
-	"github.com/google/uuid"
-
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
+	"github.com/emersion/go-ical"
+	"github.com/emersion/go-webdav"
+	"github.com/emersion/go-webdav/caldav"
+	"github.com/google/uuid"
 )
 
 type Calendar struct {

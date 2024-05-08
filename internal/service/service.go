@@ -7,11 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Raimguzhinov/go-webdav/caldav"
-	"github.com/google/uuid"
-
 	"github.com/Raimguzhinov/simple-grpc/internal/models"
 	eventctrl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
+	"github.com/emersion/go-webdav/caldav"
+	"github.com/google/uuid"
 )
 
 type Server struct {
@@ -49,7 +48,7 @@ func (s *Server) RegisterCalDAVServer(calDAVServer *Calendar) {
 	}
 	s.calDAVServer = calDAVServer
 	s.calendars = calendars
-	go s.syncWithCalendars()
+	s.syncWithCalendars()
 }
 
 func (s *Server) RegisterBrokerServer(brokerServer *Broker) {
@@ -102,9 +101,7 @@ func (s *Server) syncWithCalendars() {
 
 func (s *Server) bypassTimer() {
 	for {
-		//s.Lock()
 		if s.eventsList.Len() == 0 {
-			//s.Unlock()
 			<-s.listUpdated
 			continue
 		}
@@ -114,12 +111,10 @@ func (s *Server) bypassTimer() {
 		t2 := time.UnixMilli(event.Time).UTC()
 		timeDuration := t2.Sub(t1)
 		if timeDuration <= 0 {
-			//s.Unlock()
 			_ = s.PassedEvents(t1)
 			continue
 		}
 		timer := time.NewTimer(timeDuration)
-		//s.Unlock()
 
 		select {
 		case <-timer.C:
@@ -163,24 +158,27 @@ func (s *Server) MakeEvent(
 	s.Lock()
 	defer s.Unlock()
 
+	eventID, err := uuid.NewV7()
+	if err != nil {
+		return nil, err
+	}
+
 	event := &models.Event{
 		SenderID: req.SenderId,
-		ID:       uuid.New(),
+		ID:       eventID,
 		Time:     req.Time,
 		Name:     req.Name,
 	}
 
 	if s.calDAVServer != nil && len(s.calendars) > 0 {
-		go func() {
-			err := s.calDAVServer.PutCalendarObject(
-				context.Background(),
-				event.ICalObjectBuilder(req),
-				s.calendars[0],
-			)
-			if err != nil {
-				log.Println("Can't put event to calendar", err)
-			}
-		}()
+		err := s.calDAVServer.PutCalendarObject(
+			context.Background(),
+			event.ICalObjectBuilder(req),
+			s.calendars[0],
+		)
+		if err != nil {
+			log.Println("Can't put event to calendar", err)
+		}
 	}
 
 	if _, isExist := s.sessions[req.SenderId]; !isExist {
@@ -261,16 +259,14 @@ func (s *Server) DeleteEvent(
 			delete(s.sessions[req.SenderId], eventID)
 
 			if s.calDAVServer != nil && len(s.calendars) > 0 {
-				go func() {
-					err = s.calDAVServer.DeleteCalendarObject(
-						context.Background(),
-						eventID,
-						s.calendars[0],
-					)
-					if err != nil {
-						log.Println("Can't delete event from calendar", err)
-					}
-				}()
+				err = s.calDAVServer.DeleteCalendarObject(
+					context.Background(),
+					eventID,
+					s.calendars[0],
+				)
+				if err != nil {
+					log.Println("Can't delete event from calendar", err)
+				}
 			}
 
 			frontItem := s.eventsList.Front().Value
@@ -298,6 +294,7 @@ func (s *Server) GetEvents(
 ) error {
 	s.RLock()
 	defer s.RUnlock()
+
 	foundEvent := false
 
 	if _, isExist := s.sessions[req.SenderId]; isExist {
@@ -322,10 +319,11 @@ func (s *Server) GetEvents(
 func (s *Server) IsEventExist(senderID int64, binUID []byte) bool {
 	s.RLock()
 	defer s.RUnlock()
+
 	if eventsByClient, isCreated := s.sessions[senderID]; isCreated {
 		eventID, _ := uuid.FromBytes(binUID)
-		if _, isExist := eventsByClient[eventID]; isCreated {
-			return isExist
+		if _, isExist := eventsByClient[eventID]; isExist {
+			return true
 		}
 	}
 	return false

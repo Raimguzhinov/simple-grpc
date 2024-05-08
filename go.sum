@@ -1,5 +1,3 @@
-github.com/Raimguzhinov/go-webdav v0.0.0-20240401183055-7ebabd13384b h1:D9uSkBCzJzj+HWIdfsLzz739GgqJzjQM6InmS+qSFFw=
-github.com/Raimguzhinov/go-webdav v0.0.0-20240401183055-7ebabd13384b/go.mod h1:ihnsKa2QnLjmcy/gpM+rPXpS5rIQWChkrbV2ndrfYCg=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
@@ -21,6 +19,7 @@ github.com/emersion/go-ical v0.0.0-20220601085725-0864dccc089f/go.mod h1:2MKFUgf
 github.com/emersion/go-ical v0.0.0-20240127095438-fc1c9d8fb2b6 h1:kHoSgklT8weIDl6R6xFpBJ5IioRdBU1v2X2aCZRVCcM=
 github.com/emersion/go-ical v0.0.0-20240127095438-fc1c9d8fb2b6/go.mod h1:BEksegNspIkjCQfmzWgsgbu6KdeJ/4LwUZs7DMBzjzw=
 github.com/emersion/go-vcard v0.0.0-20230815062825-8fda7d206ec9/go.mod h1:HMJKR5wlh/ziNp+sHEDV2ltblO4JD2+IdDOWtGcQBTM=
+github.com/emersion/go-webdav v0.5.0 h1:Ak/BQLgAihJt/UxJbCsEXDPxS5Uw4nZzgIMOq3rkKjc=
 github.com/emersion/go-webdav v0.5.0/go.mod h1:ycyIzTelG5pHln4t+Y32/zBvmrM7+mV7x+V+Gx4ZQno=
 github.com/erikgeiser/promptkit v0.9.0 h1:3qL1mS/ntCrXdb8sTP/ka82CJ9kEQaGuYXNrYJkWYBc=
 github.com/erikgeiser/promptkit v0.9.0/go.mod h1:pU9dtogSe3Jlc2AY77EP7R4WFP/vgD4v+iImC83KsCo=
@@ -30,8 +29,6 @@ github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/hashicorp/go-uuid v1.0.3/go.mod h1:6SBZvOh/SIDV7/2o3Jml5SYk/TvGqwFJ/bN7x4byOro=
-github.com/joho/godotenv v1.5.1/go.mod h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=

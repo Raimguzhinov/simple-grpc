@@ -3,8 +3,8 @@ module github.com/Raimguzhinov/simple-grpc
 go 1.22.2
 
 require (
-	github.com/Raimguzhinov/go-webdav v0.0.0-20240401183055-7ebabd13384b
 	github.com/emersion/go-ical v0.0.0-20240127095438-fc1c9d8fb2b6
+	github.com/emersion/go-webdav v0.5.0
 	github.com/erikgeiser/promptkit v0.9.0
 	github.com/google/uuid v1.6.0
 	github.com/martinlindhe/notify v0.0.0-20181008203735-20632c9a275a

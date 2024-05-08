@@ -1,11 +1,12 @@
 package models
 
 import (
+	"strconv"
+	"time"
+
 	eventcrtl "github.com/Raimguzhinov/simple-grpc/pkg/delivery/grpc"
 	"github.com/emersion/go-ical"
 	"github.com/google/uuid"
-	"strconv"
-	"time"
 )
 
 type Event struct {
